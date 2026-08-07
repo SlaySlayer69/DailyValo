@@ -45,8 +45,12 @@ abstract final class RiotConstants {
 
   /// Fallback used when `valorant-api.com/v1/version` cannot be reached.
   /// The live value is fetched at runtime; this only keeps requests well-formed.
+  /// Only used until the live value arrives from valorant-api.com. Keep it
+  /// roughly current anyway: some PD endpoints are stricter about this header
+  /// than others, and a years-stale value is a plausible cause of a 404 on one
+  /// endpoint while the rest answer fine.
   static const String fallbackClientVersion =
-      'release-09.11-shipping-9-3120818';
+      'release-13.02-shipping-10-5229475';
 
   // ---------------------------------------------------------------------------
   // Player Data (PD) endpoints — `{shard}` is substituted at runtime.
@@ -65,9 +69,24 @@ abstract final class RiotConstants {
   static String entitlementsByType(String shard, String puuid, String typeId) =>
       '${pdBase(shard)}/store/v1/entitlements/$puuid/$typeId';
 
-  static String competitiveUpdates(String shard, String puuid) =>
+  /// Full MMR record: seasonal tiers plus the latest competitive update.
+  static String mmrPlayer(String shard, String puuid) =>
+      '${pdBase(shard)}/mmr/v1/players/$puuid';
+
+  /// Recent rated matches.
+  ///
+  /// [endIndex] defaults to 20 rather than 1: asking for a single match means
+  /// one unrated or placement result at the top of the list hides an otherwise
+  /// perfectly good rank.
+  static String competitiveUpdates(
+    String shard,
+    String puuid, {
+    int endIndex = 20,
+    String? queue = 'competitive',
+  }) =>
       '${pdBase(shard)}/mmr/v1/players/$puuid/competitiveupdates'
-      '?startIndex=0&endIndex=1&queue=competitive';
+      '?startIndex=0&endIndex=$endIndex'
+      '${queue == null ? '' : '&queue=$queue'}';
 
   // ---------------------------------------------------------------------------
   // Well-known UUIDs
@@ -76,8 +95,11 @@ abstract final class RiotConstants {
   /// Wallet currency identifiers.
   static const String currencyValorantPoints =
       '85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741';
+  // Verified against valorant-api.com/v1/currencies. Getting this wrong is
+  // silent: the wallet endpoint simply has no such key, so the balance reads
+  // as a plausible 0 rather than failing.
   static const String currencyRadianitePoints =
-      'e59aa87c-4cbf-517a-5f4b-3ab21d55c0e6';
+      'e59aa87c-4cbf-517a-5983-6e81511be9b7';
   static const String currencyKingdomCredits =
       '85ca954a-41f2-ce94-9b45-8ca3dd39a00d';
 

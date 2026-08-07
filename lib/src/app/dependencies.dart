@@ -35,6 +35,7 @@ class AppDependencies {
     required this.contentApi,
     required this.content,
     required this.storeApi,
+    required this.gameDio,
     required this.store,
     required this.wishlist,
     required this.player,
@@ -52,6 +53,12 @@ class AppDependencies {
   final ContentRepository content;
 
   final RiotStoreApi storeApi;
+
+  /// The authenticated PD client. Exposed only so the diagnostics screen can
+  /// probe endpoints directly and report the status code Riot returned —
+  /// repositories deliberately swallow those to keep the UI calm.
+  final Dio gameDio;
+
   final StoreRepository store;
   final WishlistRepository wishlist;
   final PlayerRepository player;
@@ -111,6 +118,7 @@ class AppDependencies {
       api: storeApi,
       sessions: sessions,
       store: localStore,
+      content: content,
     );
 
     final NotificationService notifications = NotificationService();
@@ -131,6 +139,7 @@ class AppDependencies {
       contentApi: contentApi,
       content: content,
       storeApi: storeApi,
+      gameDio: gameDio,
       store: store,
       wishlist: wishlist,
       player: player,

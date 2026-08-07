@@ -76,16 +76,29 @@ class CurrencyAmount extends StatelessWidget {
   }
 }
 
-/// A balance as shown in the header: icon, amount, and a wide-tracked label.
+/// A balance as shown in the header: amount plus a wide-tracked currency label.
+///
+/// Text-only, deliberately. Riot serves no icon for Radianite Points (that
+/// currency's `displayicon.png` 404s), so an icon here meant VP got real art
+/// while RP got a generic placeholder glyph — visually inconsistent and
+/// meaningless. `VP` and `RP` are the labels players already use in game, and
+/// two short words read faster in a cramped header than two small images.
+/// Prices on cards keep their VP icon, where there is room and only one
+/// currency is ever shown.
 class BalanceChip extends StatelessWidget {
   const BalanceChip({
     required this.amount,
     required this.currency,
     super.key,
+    this.known = true,
   });
 
   final int amount;
   final Currency currency;
+
+  /// False when the wallet lookup failed. Renders an em dash: 0 is a perfectly
+  /// plausible balance, so showing one we never received reads as fact.
+  final bool known;
 
   @override
   Widget build(BuildContext context) {
@@ -99,12 +112,10 @@ class BalanceChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          CurrencyAmount(
-            amount: amount,
-            currency: currency,
-            iconSize: 13,
+          Text(
+            known ? Formatters.points(amount) : '—',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.textPrimary,
+              color: known ? AppColors.textPrimary : AppColors.textTertiary,
               fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),

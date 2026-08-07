@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../../../core/constants/riot_constants.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../player/data/models/player_profile.dart';
+import '../models/competitive_standing.dart';
+import '../models/rank_attempt.dart';
 import '../models/storefront_snapshot.dart';
 import 'storefront_parser.dart';
 
@@ -98,34 +102,230 @@ class RiotStoreApi {
         .toSet();
   }
 
-  /// Current competitive tier and RR, from the most recent ranked update.
+  /// The player's current competitive tier and RR.
   ///
-  /// Returns `(0, 0)` when the player is unranked this act — the endpoint
-  /// simply returns an empty match list, which is not an error.
-  Future<({int tier, int rankedRating})> fetchCompetitiveStanding({
+  /// Returns null when it genuinely could not be determined, which is *not*
+  /// the same as being unranked — conflating the two renders every outage as a
+  /// confident "Unranked".
+  ///
+  /// Riot exposes rank through more than one endpoint and their availability
+  /// varies by account, so each is tried in turn and the first usable answer
+  /// wins. [actUuids] should be newest first: the MMR record is keyed by
+  /// season, and a player who has not played this act still has a standing
+  /// from the previous one.
+  ///
+  /// [attempts], when supplied, is filled with what each source did — including
+  /// the response's top-level keys on a miss, which is what makes an unexpected
+  /// payload shape diagnosable from the device instead of guessed at.
+  Future<CompetitiveStanding?> fetchCompetitiveStanding({
     required String shard,
     required String puuid,
+    List<String> actUuids = const <String>[],
+    List<RankAttempt>? attempts,
+  }) async {
+    final CompetitiveStanding? fromRecord = await _standingFromMmrRecord(
+      shard: shard,
+      puuid: puuid,
+      actUuids: actUuids,
+      attempts: attempts,
+    );
+    if (fromRecord != null && !fromRecord.isUnranked) return fromRecord;
+
+    final CompetitiveStanding? fromMatches = await _standingFromUpdates(
+      shard: shard,
+      puuid: puuid,
+      queue: 'competitive',
+      attempts: attempts,
+    );
+    if (fromMatches != null && !fromMatches.isUnranked) return fromMatches;
+
+    final CompetitiveStanding? unfiltered = await _standingFromUpdates(
+      shard: shard,
+      puuid: puuid,
+      queue: null,
+      attempts: attempts,
+    );
+    if (unfiltered != null && !unfiltered.isUnranked) return unfiltered;
+
+    // If any source answered, the player really is unranked; if they all
+    // failed, we do not know.
+    return fromRecord ?? fromMatches ?? unfiltered;
+  }
+
+  Future<CompetitiveStanding?> _standingFromMmrRecord({
+    required String shard,
+    required String puuid,
+    required List<String> actUuids,
+    List<RankAttempt>? attempts,
   }) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        RiotConstants.competitiveUpdates(shard, puuid),
+        RiotConstants.mmrPlayer(shard, puuid),
       );
-      final Object? matches = _asMap(response.data)['Matches'];
-      if (matches is! List || matches.isEmpty) {
-        return (tier: 0, rankedRating: 0);
+      final Map<String, dynamic> body = _asMap(response.data);
+      if (body.isEmpty) {
+        attempts?.add(
+          RankAttempt(
+            'MMR record',
+            ok: true,
+            note: 'unreadable body (${_shapeOf(response.data)})',
+          ),
+        );
+        return null;
       }
-      final Map<String, dynamic> latest = _asMap(matches.first);
-      return (
-        tier: (latest['TierAfterUpdate'] as num?)?.toInt() ?? 0,
-        rankedRating: (latest['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
+
+      final Map<String, dynamic> seasons = _asMap(
+        _asMap(
+          _asMap(body['QueueSkills'])['competitive'],
+        )['SeasonalInfoBySeasonID'],
       );
+
+      // Walk acts newest first, so a gap in the current act falls back to the
+      // most recent one the player actually placed in.
+      for (final String uuid in actUuids) {
+        final Map<String, dynamic> act = _asMap(seasons[uuid]);
+        final int tier = (act['CompetitiveTier'] as num?)?.toInt() ?? 0;
+        if (tier > 0) {
+          attempts?.add(
+            const RankAttempt('MMR record (seasonal)', ok: true),
+          );
+          return CompetitiveStanding(
+            tier: tier,
+            rankedRating: (act['RankedRating'] as num?)?.toInt() ?? 0,
+          );
+        }
+      }
+
+      final Map<String, dynamic> latest = _asMap(
+        body['LatestCompetitiveUpdate'],
+      );
+      final int latestTier = (latest['TierAfterUpdate'] as num?)?.toInt() ?? 0;
+      if (latestTier > 0) {
+        attempts?.add(const RankAttempt('MMR record (latest)', ok: true));
+        return CompetitiveStanding(
+          tier: latestTier,
+          rankedRating:
+              (latest['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
+        );
+      }
+
+      attempts?.add(
+        RankAttempt(
+          'MMR record',
+          ok: true,
+          note: 'no rank · ${seasons.length} seasons · keys ${_keys(body)}',
+        ),
+      );
+      return const CompetitiveStanding.unranked();
     } on DioException catch (e) {
-      // Rank is decoration; never fail the header over it.
-      Log.e('Store', 'Competitive standing lookup failed', e);
-      return (tier: 0, rankedRating: 0);
+      final int? status = e.response?.statusCode;
+      attempts?.add(
+        RankAttempt(
+          'MMR record',
+          ok: false,
+          note: 'HTTP ${status ?? e.type.name}',
+        ),
+      );
+      Log.e('Store', 'MMR record unavailable ($status)', e);
+      return null;
     }
   }
 
-  static Map<String, dynamic> _asMap(Object? value) =>
-      value is Map<String, dynamic> ? value : const <String, dynamic>{};
+  Future<CompetitiveStanding?> _standingFromUpdates({
+    required String shard,
+    required String puuid,
+    required String? queue,
+    List<RankAttempt>? attempts,
+  }) async {
+    final String label =
+        'Match history${queue == null ? ' (all queues)' : ' (competitive)'}';
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        RiotConstants.competitiveUpdates(shard, puuid, queue: queue),
+      );
+      final Map<String, dynamic> body = _asMap(response.data);
+      final Object? matches = body['Matches'];
+
+      if (matches is! List) {
+        // Report the shape rather than a bare "no matches": an unexpected
+        // payload and an empty history are entirely different problems.
+        attempts?.add(
+          RankAttempt(
+            label,
+            ok: true,
+            note: body.isEmpty
+                ? 'unreadable body (${_shapeOf(response.data)})'
+                : 'no Matches · keys ${_keys(body)}',
+          ),
+        );
+        return const CompetitiveStanding.unranked();
+      }
+
+      // Scan rather than taking the head: placement and unrated results carry
+      // TierAfterUpdate 0 and would otherwise mask a perfectly good rank.
+      for (final Object? raw in matches) {
+        final Map<String, dynamic> m = _asMap(raw);
+        final int tier = (m['TierAfterUpdate'] as num?)?.toInt() ?? 0;
+        if (tier > 0) {
+          attempts?.add(
+            RankAttempt(label, ok: true, note: '${matches.length} matches'),
+          );
+          return CompetitiveStanding(
+            tier: tier,
+            rankedRating: (m['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
+          );
+        }
+      }
+
+      attempts?.add(
+        RankAttempt(
+          label,
+          ok: true,
+          note: '${matches.length} matches, none rated',
+        ),
+      );
+      return const CompetitiveStanding.unranked();
+    } on DioException catch (e) {
+      final int? status = e.response?.statusCode;
+      attempts?.add(
+        RankAttempt(label, ok: false, note: 'HTTP ${status ?? e.type.name}'),
+      );
+      Log.e('Store', '$label unavailable ($status)', e);
+      return null;
+    }
+  }
+
+  /// Top-level keys, truncated. Structure only — never values, which on these
+  /// endpoints include account identifiers.
+  static String _keys(Map<String, dynamic> body) {
+    final List<String> keys = body.keys.take(6).toList();
+    return '[${keys.join(', ')}${body.length > 6 ? ', …' : ''}]';
+  }
+
+  /// What the body actually deserialised to, when it was not a JSON object.
+  static String _shapeOf(Object? data) {
+    if (data == null) return 'null';
+    if (data is String) {
+      return 'String, ${data.length} chars';
+    }
+    return data.runtimeType.toString();
+  }
+
+  /// Coerces a response fragment to a map.
+  ///
+  /// Also decodes a raw JSON string. The interceptor normally handles that,
+  /// but this is the layer where a silent empty map turns into a wrong number
+  /// on screen, so it does not assume.
+  static Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is String && value.isNotEmpty) {
+      try {
+        final Object? decoded = jsonDecode(value);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } on FormatException {
+        // Fall through to the empty map.
+      }
+    }
+    return const <String, dynamic>{};
+  }
 }

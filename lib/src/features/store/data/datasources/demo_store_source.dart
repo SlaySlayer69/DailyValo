@@ -4,6 +4,7 @@ import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../../../player/data/models/player_profile.dart';
+import '../models/competitive_standing.dart';
 import '../models/storefront_snapshot.dart';
 
 /// Generates a plausible store from the *real* content catalogue, with no Riot
@@ -129,8 +130,8 @@ class DemoStoreSource {
   }
 
   /// Ascendant 2, 47 RR.
-  ({int tier, int rankedRating}) buildCompetitiveStanding() =>
-      (tier: 22, rankedRating: 47);
+  CompetitiveStanding buildCompetitiveStanding() =>
+      const CompetitiveStanding(tier: 22, rankedRating: 47);
 
   /// Distinct random picks without mutating [pool].
   static List<WeaponSkin> _pick(

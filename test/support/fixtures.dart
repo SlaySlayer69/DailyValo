@@ -123,6 +123,33 @@ abstract final class Fixtures {
     weaponCategory: 'Melee',
   );
 
+  /// A skin with no level clips but a filmed colour variant — the case that
+  /// makes the chroma-video fallback observable.
+  static WeaponSkin glitchpopKnifeWithChromaVideo() => WeaponSkin.fromJson(
+    <String, dynamic>{
+      'uuid': glitchpopKnifeSkinUuid,
+      'displayName': 'Glitchpop Dagger',
+      'contentTierUuid': tierUltraUuid,
+      'levels': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'uuid': glitchpopKnifeLevel1Uuid,
+          'displayName': 'Glitchpop Dagger',
+        },
+      ],
+      'chromas': <Map<String, dynamic>>[
+        <String, dynamic>{'uuid': 'gk-c1', 'displayName': 'Glitchpop Dagger'},
+        <String, dynamic>{
+          'uuid': 'gk-c2',
+          'displayName': 'Glitchpop Dagger Variant 2 Cyan',
+          'streamedVideo': 'https://media.valorant-api.com/gk-v2.mp4',
+        },
+      ],
+    },
+    weaponUuid: 'w-melee',
+    weaponName: 'Melee',
+    weaponCategory: 'Melee',
+  );
+
   /// A standard-issue weapon: no content tier, never sold.
   static WeaponSkin standardPhantom() => WeaponSkin.fromJson(
     <String, dynamic>{

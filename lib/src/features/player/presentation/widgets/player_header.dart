@@ -44,8 +44,11 @@ class PlayerHeader extends ConsumerWidget {
       ),
       child: profile.when(
         loading: () => const _HeaderSkeleton(),
+        // Reaching this now means there is no session at all — every network
+        // failure is contained inside the repository and still yields a
+        // profile built from the session.
         error: (Object _, StackTrace _) => _HeaderFallback(
-          message: 'Profile unavailable',
+          message: 'Not signed in',
           onTap: onTapProfile,
         ),
         data: (PlayerProfile data) => _HeaderContent(
@@ -103,11 +106,13 @@ class _HeaderContent extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                _rankLabel(tier, profile.rankedRating),
+                _rankLabel(tier, profile.rankedRating, profile.rankKnown),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: text.bodySmall?.copyWith(
-                  color: tier?.displayColor ?? AppColors.textTertiary,
+                  color: profile.rankKnown
+                      ? (tier?.displayColor ?? AppColors.textTertiary)
+                      : AppColors.textTertiary,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.3,
                 ),
@@ -123,11 +128,13 @@ class _HeaderContent extends StatelessWidget {
             BalanceChip(
               amount: profile.wallet.valorantPoints,
               currency: Currency.valorantPoints,
+              known: profile.walletKnown,
             ),
             const SizedBox(height: 5),
             BalanceChip(
               amount: profile.wallet.radianitePoints,
               currency: Currency.radianitePoints,
+              known: profile.walletKnown,
             ),
           ],
         ),
@@ -142,7 +149,10 @@ class _HeaderContent extends StatelessWidget {
     );
   }
 
-  static String _rankLabel(CompetitiveTier? tier, int rr) {
+  static String _rankLabel(CompetitiveTier? tier, int rr, bool known) {
+    // "Unranked" is a claim about the account; only make it when Riot actually
+    // told us so. A failed lookup says so instead.
+    if (!known) return 'Rank unavailable';
     if (tier == null || tier.isUnranked) return 'Unranked';
     return '${Formatters.titleCase(tier.tierName)} · $rr RR';
   }

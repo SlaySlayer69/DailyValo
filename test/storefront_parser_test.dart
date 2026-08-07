@@ -32,7 +32,31 @@ void main() {
 
       // 3600s remaining, captured at 12:00 -> resets at 13:00.
       expect(snapshot.dailyResetAt, DateTime(2026, 8, 7, 13));
-      expect(snapshot.isExpired, isFalse);
+    });
+
+    test('expiry is judged against the wall clock, not the capture time', () {
+      // Deliberately relative to now: `isExpired` asks whether the shop has
+      // rotated *since*, so pinning it to a fixed timestamp makes the test
+      // pass or fail depending on the hour it happens to run.
+      final DateTime realNow = DateTime.now();
+
+      expect(
+        StorefrontParser.parse(
+          Fixtures.storefrontJson(),
+          now: realNow,
+        ).isExpired,
+        isFalse,
+        reason: 'a shop with an hour left has not expired',
+      );
+
+      expect(
+        StorefrontParser.parse(
+          Fixtures.storefrontJson(),
+          now: realNow.subtract(const Duration(hours: 2)),
+        ).isExpired,
+        isTrue,
+        reason: 'a 1h window captured 2h ago has lapsed',
+      );
     });
 
     test('parses the night market with discount and base price', () {

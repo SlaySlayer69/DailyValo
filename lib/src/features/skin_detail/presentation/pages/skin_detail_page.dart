@@ -11,6 +11,7 @@ import '../../../content/presentation/widgets/tier_badge.dart';
 import '../../../player/presentation/widgets/currency_chip.dart';
 import '../widgets/chroma_selector.dart';
 import '../widgets/level_list.dart';
+import '../widgets/skin_video_sheet.dart';
 
 /// Full-screen detail view for a skin: artwork, variants, and every upgrade
 /// level with what it actually adds.
@@ -68,6 +69,17 @@ class _SkinDetailPageState extends ConsumerState<SkinDetailPage> {
   String? get _artwork =>
       _selectedChroma?.fullRender ?? _selectedChroma?.displayIcon ?? _skin.artwork;
 
+  /// Clip for the current selection.
+  ///
+  /// Falls back to the base level's clip when the selected chroma has none —
+  /// Riot only publishes variant clips for chromas with unique VFX, and showing
+  /// the base skin in motion is better than showing nothing.
+  String? get _previewVideoUrl {
+    final SkinChroma? chroma = _selectedChroma;
+    if (chroma != null && chroma.hasVideo) return chroma.streamedVideo;
+    return _skin.previewVideoUrl;
+  }
+
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
@@ -106,6 +118,19 @@ class _SkinDetailPageState extends ConsumerState<SkinDetailPage> {
                 imageUrl: _artwork,
                 wallpaper: _skin.wallpaper,
                 accent: accent,
+                // Chroma clips are reached from the artwork rather than from
+                // the swatch: a 52px swatch is not a sane tap target for two
+                // different actions, and tapping it already swaps the render.
+                onPlayPreview: _previewVideoUrl == null
+                    ? null
+                    : () => SkinVideoSheet.open(
+                        context,
+                        videoUrl: _previewVideoUrl!,
+                        title: _selectedChroma == null
+                            ? 'Preview'
+                            : _selectedChroma!.shortName(_skin.displayName),
+                        subtitle: _skin.displayName,
+                      ),
               ),
             ),
           ),
@@ -218,11 +243,15 @@ class _HeroArtwork extends StatelessWidget {
     required this.imageUrl,
     required this.wallpaper,
     required this.accent,
+    this.onPlayPreview,
   });
 
   final String? imageUrl;
   final String? wallpaper;
   final Color accent;
+
+  /// Null when Riot publishes no clip for this skin at all.
+  final VoidCallback? onPlayPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +299,54 @@ class _HeroArtwork extends StatelessWidget {
           ),
           child: RemoteImage(url: imageUrl, fit: BoxFit.contain),
         ),
+        if (onPlayPreview != null)
+          Positioned(
+            right: AppSpacing.lg,
+            bottom: AppSpacing.lg,
+            child: _PlayPreviewButton(accent: accent, onPressed: onPlayPreview!),
+          ),
       ],
+    );
+  }
+}
+
+/// Sits on the artwork rather than in the content below it, so it reads as
+/// "play what you are looking at".
+class _PlayPreviewButton extends StatelessWidget {
+  const _PlayPreviewButton({required this.accent, required this.onPressed});
+
+  final Color accent;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface.withValues(alpha: 0.92),
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.play_arrow_rounded, size: 18, color: accent),
+              const SizedBox(width: 5),
+              Text(
+                'PREVIEW',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

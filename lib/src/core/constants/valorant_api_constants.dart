@@ -15,6 +15,9 @@ abstract final class ValorantApiConstants {
   static const String contentTiers = '$base/contenttiers';
   static const String competitiveTiers = '$base/competitivetiers';
   static const String bundles = '$base/bundles';
+
+  /// Acts and episodes. Used to find the act the MMR record is keyed by.
+  static const String seasons = '$base/seasons';
   static const String version = '$base/version';
 
   /// Currency icons served from the same CDN, addressed by currency UUID.

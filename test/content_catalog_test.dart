@@ -110,4 +110,34 @@ void main() {
       expect(Fixtures.primeVandal().offerUuid, Fixtures.primeVandalLevel1Uuid);
     });
   });
+
+  group('Preview video selection', () {
+    test('finds the first level clip the skin publishes', () {
+      // Prime Vandal has no base clip but does have one on its VFX level.
+      expect(
+        Fixtures.primeVandal().previewVideoUrl,
+        'https://media.valorant-api.com/prime-vfx.mp4',
+      );
+    });
+
+    test('reports null when Riot publishes no clip at all', () {
+      final WeaponSkin sheriff = Fixtures.reaverSheriff();
+      expect(sheriff.previewVideoUrl, isNull);
+      expect(sheriff.hasAnyPreviewVideo, isFalse);
+    });
+
+    test('a chroma-only clip still counts as previewable', () {
+      // No level clips, but one variant is filmed.
+      final WeaponSkin knife = Fixtures.glitchpopKnifeWithChromaVideo();
+      expect(knife.previewVideoUrl, isNull);
+      expect(knife.hasAnyPreviewVideo, isTrue);
+      expect(knife.chromas.last.hasVideo, isTrue);
+    });
+
+    test('a level with no streamedVideo is not playable', () {
+      final SkinLevel base = Fixtures.primeVandal().levels.first;
+      expect(base.hasVideo, isFalse);
+      expect(base.streamedVideo, isNull);
+    });
+  });
 }

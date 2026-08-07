@@ -81,15 +81,75 @@ class ContentRepository {
     return catalog;
   }
 
+  /// UUID of the current act, cached for a day.
+  ///
+  /// Kept out of the catalogue blob deliberately: acts roll over on their own
+  /// schedule, and a user sitting on a fresh 24-hour catalogue cache should
+  /// still get a correct rank the day an act flips.
+  Future<String?> currentActUuid() async {
+    final String? cached = _store.readCachedString(CacheKeys.currentActUuid);
+    final DateTime? fetchedAt = DateTime.tryParse(
+      _store.readCachedString(CacheKeys.currentActFetchedAt) ?? '',
+    );
+    final bool fresh =
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < const Duration(hours: 24);
+    if (cached != null && cached.isNotEmpty && fresh) return cached;
+
+    try {
+      final String? uuid = await _client.fetchCurrentActUuid();
+      if (uuid != null && uuid.isNotEmpty) {
+        await _store.writeCachedString(CacheKeys.currentActUuid, uuid);
+        await _store.writeCachedString(
+          CacheKeys.currentActFetchedAt,
+          DateTime.now().toIso8601String(),
+        );
+        return uuid;
+      }
+    } on Object catch (e) {
+      Log.e('Content', 'Current act lookup failed', e);
+    }
+    // A stale value still beats none: acts run for weeks.
+    return cached;
+  }
+
+  List<String>? _actUuids;
+
+  /// Act uuids newest first, so a rank lookup can walk back through acts.
+  Future<List<String>> actUuidsNewestFirst() async {
+    final List<String>? cached = _actUuids;
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      return _actUuids = await _client.fetchActUuidsNewestFirst();
+    } on Object catch (e) {
+      Log.e('Content', 'Act list lookup failed', e);
+      final String? current = await currentActUuid();
+      return _actUuids = current == null ? <String>[] : <String>[current];
+    }
+  }
+
+  Future<void>? _versionSync;
+
   /// Refreshes the `X-Riot-ClientVersion` used by PD requests.
   ///
-  /// Best-effort: a stale-but-plausible version still works for a while, and
-  /// failing app start over it would be absurd.
-  Future<void> syncClientVersion() async {
+  /// Memoised, so callers that need the header to be current can simply await
+  /// it without causing a second fetch. Bounded and best-effort: a
+  /// stale-but-plausible version still works for most endpoints, and failing
+  /// app start over a third-party CDN would be absurd.
+  Future<void> syncClientVersion() =>
+      _versionSync ??= _doSyncClientVersion();
+
+  Future<void> _doSyncClientVersion() async {
     try {
-      await _clientVersion.update(await _client.fetchClientVersion());
+      final String version = await _client.fetchClientVersion().timeout(
+        const Duration(seconds: 8),
+      );
+      await _clientVersion.update(version);
+      Log.d('Content', 'Client version: $version');
     } on Object catch (e) {
       Log.e('Content', 'Client version sync failed; keeping cached value', e);
+      // Do not memoise a failure for the life of the process.
+      _versionSync = null;
     }
   }
 

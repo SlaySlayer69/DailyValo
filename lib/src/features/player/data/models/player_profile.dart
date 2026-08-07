@@ -38,6 +38,8 @@ class PlayerProfile {
     required this.competitiveTier,
     required this.rankedRating,
     required this.updatedAt,
+    this.rankKnown = true,
+    this.walletKnown = true,
   });
 
   final String puuid;
@@ -51,6 +53,16 @@ class PlayerProfile {
   /// RR within the current tier, 0–100.
   final int rankedRating;
 
+  /// False when the rank lookup failed outright. Distinguishes "we could not
+  /// find out" from "genuinely unranked", which look identical otherwise and
+  /// would have the header confidently state something untrue.
+  final bool rankKnown;
+
+  /// False when the wallet lookup failed. Same reasoning: a balance of 0 is a
+  /// perfectly plausible number, so showing one we did not actually receive is
+  /// worse than showing nothing.
+  final bool walletKnown;
+
   final DateTime updatedAt;
 
   String get riotId => tagLine.isEmpty ? gameName : '$gameName#$tagLine';
@@ -59,6 +71,8 @@ class PlayerProfile {
     Wallet? wallet,
     int? competitiveTier,
     int? rankedRating,
+    bool? rankKnown,
+    bool? walletKnown,
   }) => PlayerProfile(
     puuid: puuid,
     gameName: gameName,
@@ -66,6 +80,8 @@ class PlayerProfile {
     wallet: wallet ?? this.wallet,
     competitiveTier: competitiveTier ?? this.competitiveTier,
     rankedRating: rankedRating ?? this.rankedRating,
+    rankKnown: rankKnown ?? this.rankKnown,
+    walletKnown: walletKnown ?? this.walletKnown,
     updatedAt: DateTime.now(),
   );
 
@@ -76,6 +92,8 @@ class PlayerProfile {
     'wallet': wallet.toJson(),
     'competitiveTier': competitiveTier,
     'rankedRating': rankedRating,
+    'rankKnown': rankKnown,
+    'walletKnown': walletKnown,
     'updatedAt': updatedAt.toIso8601String(),
   };
 
@@ -90,6 +108,8 @@ class PlayerProfile {
           : Wallet.empty,
       competitiveTier: (json['competitiveTier'] as num?)?.toInt() ?? 0,
       rankedRating: (json['rankedRating'] as num?)?.toInt() ?? 0,
+      rankKnown: json['rankKnown'] as bool? ?? true,
+      walletKnown: json['walletKnown'] as bool? ?? true,
       updatedAt:
           DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
           DateTime.now(),
