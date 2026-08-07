@@ -105,6 +105,41 @@ class ValorantApiClient {
   /// only rank we can read is whatever the last competitive match left behind.
   /// Returns null between acts, or if the payload shape ever changes — the
   /// caller falls back rather than failing.
+  /// Every act uuid, newest first.
+  ///
+  /// The MMR record is keyed by season uuid, and betting on a single "current"
+  /// act is fragile: acts roll over, and a player who has not played this act
+  /// still has a rank from the previous one. An ordered list lets the caller
+  /// walk back until it finds a standing.
+  Future<List<String>> fetchActUuidsNewestFirst() async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      ValorantApiConstants.seasons,
+    );
+
+    final List<({DateTime start, String uuid})> acts =
+        <({DateTime start, String uuid})>[];
+    for (final Map<String, dynamic> season in _dataList(response.data)) {
+      if (!(season['type'] as String? ?? '').contains('Act')) continue;
+      final String? uuid = season['uuid'] as String?;
+      final DateTime? start = DateTime.tryParse(
+        season['startTime'] as String? ?? '',
+      );
+      if (uuid == null || start == null) continue;
+      acts.add((start: start, uuid: uuid));
+    }
+
+    acts.sort(
+      (({DateTime start, String uuid}) a, ({DateTime start, String uuid}) b) =>
+          b.start.compareTo(a.start),
+    );
+    // Acts that have not started yet cannot hold a standing.
+    final DateTime now = DateTime.now().toUtc();
+    return acts
+        .where((({DateTime start, String uuid}) a) => !a.start.isAfter(now))
+        .map((({DateTime start, String uuid}) a) => a.uuid)
+        .toList(growable: false);
+  }
+
   Future<String?> fetchCurrentActUuid() async {
     final Response<dynamic> response = await _dio.get<dynamic>(
       ValorantApiConstants.seasons,

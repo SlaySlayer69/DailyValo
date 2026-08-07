@@ -113,6 +113,21 @@ class ContentRepository {
     return cached;
   }
 
+  List<String>? _actUuids;
+
+  /// Act uuids newest first, so a rank lookup can walk back through acts.
+  Future<List<String>> actUuidsNewestFirst() async {
+    final List<String>? cached = _actUuids;
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      return _actUuids = await _client.fetchActUuidsNewestFirst();
+    } on Object catch (e) {
+      Log.e('Content', 'Act list lookup failed', e);
+      final String? current = await currentActUuid();
+      return _actUuids = current == null ? <String>[] : <String>[current];
+    }
+  }
+
   Future<void>? _versionSync;
 
   /// Refreshes the `X-Riot-ClientVersion` used by PD requests.

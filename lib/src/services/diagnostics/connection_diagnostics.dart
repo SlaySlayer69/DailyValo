@@ -63,12 +63,13 @@ class ConnectionDiagnostics {
     // Rank is resolved through several endpoints; report what each one did
     // rather than a single pass/fail that hides which source is broken.
     final String? act = await _deps.content.currentActUuid();
+    final List<String> actUuids = await _deps.content.actUuidsNewestFirst();
     final List<RankAttempt> attempts = <RankAttempt>[];
     final CompetitiveStanding? standing = await _deps.storeApi
         .fetchCompetitiveStanding(
           shard: session.shard,
           puuid: session.puuid,
-          actUuid: act,
+          actUuids: actUuids,
           attempts: attempts,
         );
 
@@ -118,7 +119,9 @@ class ConnectionDiagnostics {
       DiagnosticResult(
         'Current act',
         ok: act != null,
-        detail: act ?? 'unresolved — rank falls back to the last rated match',
+        detail: act == null
+            ? 'unresolved — rank falls back to the last rated match'
+            : '$act (${actUuids.length} acts known)',
       ),
     );
 

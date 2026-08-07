@@ -142,7 +142,7 @@ void main() {
             ),
           ),
         ]),
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s?.tier, 22);
       expect(s?.rankedRating, 47);
@@ -153,7 +153,7 @@ void main() {
         StubAdapter(<Route>[
           ('/mmr/v1/players/', 200, mmr(latestTier: 18, latestRr: 33)),
         ]),
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s?.tier, 18);
       expect(s?.rankedRating, 33);
@@ -182,7 +182,7 @@ void main() {
 
       final CompetitiveStanding? s = await apiWith(
         adapter,
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s?.tier, 20);
       expect(s?.rankedRating, 61);
@@ -208,7 +208,7 @@ void main() {
           ),
           ('/mmr/v1/players/', 404, const <String, dynamic>{}),
         ]),
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s?.tier, 21);
       expect(s?.rankedRating, 12);
@@ -249,13 +249,71 @@ void main() {
       expect(s?.tier, 17);
     });
 
+    test('walks back through acts when the current one has no standing',
+        () async {
+      // A player who has not placed this act still has a rank from the last.
+      const String olderAct = 'older-act-uuid';
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          (
+            '/mmr/v1/players/',
+            200,
+            mmr(
+              seasonal: <String, dynamic>{
+                olderAct: <String, dynamic>{
+                  'CompetitiveTier': 19,
+                  'RankedRating': 55,
+                },
+              },
+            ),
+          ),
+        ]),
+      ).fetchCompetitiveStanding(
+        shard: 'eu',
+        puuid: 'p',
+        // Newest first: the current act is absent from the record.
+        actUuids: const <String>[act, olderAct],
+      );
+
+      expect(s?.tier, 19);
+      expect(s?.rankedRating, 55);
+    });
+
+    test('reports the payload shape when Matches is missing', () async {
+      // Observed on a real account: HTTP 200 with no Matches key at all.
+      // "no matches" and "unexpected shape" are different problems and the
+      // diagnostics output has to tell them apart.
+      final List<RankAttempt> attempts = <RankAttempt>[];
+
+      await apiWith(
+        StubAdapter(<Route>[
+          ('competitiveupdates', 200, <String, dynamic>{
+            'Version': 0,
+            'Subject': 'p',
+          }),
+          ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+        ]),
+      ).fetchCompetitiveStanding(
+        shard: 'eu',
+        puuid: 'p',
+        attempts: attempts,
+      );
+
+      final RankAttempt history = attempts.firstWhere(
+        (RankAttempt a) => a.source.contains('competitive'),
+      );
+      expect(history.note, contains('no Matches'));
+      expect(history.note, contains('Version'));
+      expect(history.note, contains('Subject'));
+    });
+
     test('reports genuine unranked when every source answers empty', () async {
       final CompetitiveStanding? s = await apiWith(
         StubAdapter(<Route>[
           ('competitiveupdates', 200, matches(const <Map<String, dynamic>>[])),
           ('/mmr/v1/players/', 200, mmr()),
         ]),
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s, isNotNull, reason: 'Riot answered; this is a real unranked');
       expect(s!.isUnranked, isTrue);
@@ -276,7 +334,7 @@ void main() {
       ).fetchCompetitiveStanding(
         shard: 'eu',
         puuid: 'p',
-        actUuid: act,
+        actUuids: const <String>[act],
         attempts: attempts,
       );
 
@@ -295,7 +353,7 @@ void main() {
           ('competitiveupdates', 500, const <String, dynamic>{}),
           ('/mmr/v1/players/', 500, const <String, dynamic>{}),
         ]),
-      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuids: const <String>[act]);
 
       expect(s, isNull);
     });

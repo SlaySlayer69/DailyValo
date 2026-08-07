@@ -100,11 +100,11 @@ class PlayerRepository {
     try {
       // The act uuid keys the MMR record. Cached, so usually free — and its
       // own failure must not cost us the rank, let alone the whole header.
-      final String? actUuid = await _content.currentActUuid();
+      final List<String> actUuids = await _content.actUuidsNewestFirst();
       return await _api.fetchCompetitiveStanding(
         shard: session.shard,
         puuid: session.puuid,
-        actUuid: actUuid,
+        actUuids: actUuids,
       );
     } on Object catch (e) {
       Log.e('Player', 'Competitive standing unavailable', e);
