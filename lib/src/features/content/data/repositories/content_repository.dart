@@ -1,0 +1,122 @@
+import 'dart:async';
+
+import '../../../../core/constants/storage_keys.dart';
+import '../../../../core/network/client_version.dart';
+import '../../../../core/storage/local_store.dart';
+import '../../../../core/utils/logger.dart';
+import '../datasources/valorant_api_client.dart';
+import '../models/content_catalog.dart';
+import '../models/content_tier.dart';
+import '../models/weapon_skin.dart';
+
+/// Owns the static content catalogue and its cache policy.
+///
+/// The catalogue is ~4 MB of JSON and changes only on patch day, so:
+///
+/// * a cached copy is returned immediately, even when stale;
+/// * a stale copy triggers a background refresh that swaps in silently;
+/// * a network failure with a cache present is not an error.
+///
+/// That is what lets the shop tab render instantly on a cold start, and at all
+/// on a plane.
+class ContentRepository {
+  ContentRepository({
+    required ValorantApiClient client,
+    required LocalStore store,
+    required ClientVersionHolder clientVersion,
+  }) : _client = client,
+       _store = store,
+       _clientVersion = clientVersion;
+
+  final ValorantApiClient _client;
+  final LocalStore _store;
+  final ClientVersionHolder _clientVersion;
+
+  ContentCatalog? _memory;
+
+  /// Returns the catalogue, fetching only when there is nothing usable cached.
+  ///
+  /// Set [forceRefresh] for pull-to-refresh.
+  Future<ContentCatalog> getCatalog({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final ContentCatalog? cached = _memory ?? _readCache();
+      if (cached != null && cached.language == _client.language) {
+        _memory = cached;
+        if (cached.isStale) {
+          // Fire-and-forget: the user gets the cached copy now, and the next
+          // read gets the fresh one.
+          _fireAndForget(_refresh(), 'stale catalogue refresh');
+        }
+        return cached;
+      }
+    }
+    return _refresh();
+  }
+
+  /// The synchronously available catalogue, if one has already been loaded.
+  /// Used by widgets that must not suspend (e.g. the notification builder).
+  ContentCatalog? get cached => _memory ?? _readCache();
+
+  Future<ContentCatalog> _refresh() async {
+    Log.d('Content', 'Fetching catalogue (${_client.language})');
+
+    // Three independent requests — no reason to serialise them.
+    final List<Object> results = await Future.wait<Object>(<Future<Object>>[
+      _client.fetchSkins(),
+      _client.fetchContentTiers(),
+      _client.fetchCompetitiveTiers(),
+    ]);
+
+    final ContentCatalog catalog = ContentCatalog(
+      skins: results[0] as List<WeaponSkin>,
+      tiers: results[1] as Map<String, ContentTier>,
+      competitiveTiers: results[2] as Map<int, CompetitiveTier>,
+      language: _client.language,
+      fetchedAt: DateTime.now(),
+    );
+
+    _memory = catalog;
+    await _store.writeCached(CacheKeys.contentCatalog, catalog.toJson());
+    Log.d('Content', 'Catalogue ready: ${catalog.skins.length} skins');
+    return catalog;
+  }
+
+  /// Refreshes the `X-Riot-ClientVersion` used by PD requests.
+  ///
+  /// Best-effort: a stale-but-plausible version still works for a while, and
+  /// failing app start over it would be absurd.
+  Future<void> syncClientVersion() async {
+    try {
+      await _clientVersion.update(await _client.fetchClientVersion());
+    } on Object catch (e) {
+      Log.e('Content', 'Client version sync failed; keeping cached value', e);
+    }
+  }
+
+  ContentCatalog? _readCache() {
+    final Map<String, dynamic>? json = _store.readCachedMap(
+      CacheKeys.contentCatalog,
+    );
+    if (json == null) return null;
+    try {
+      return ContentCatalog.fromJson(json);
+    } on Object catch (e) {
+      Log.e('Content', 'Cached catalogue was unreadable; dropping it', e);
+      _fireAndForget(
+        _store.deleteCached(CacheKeys.contentCatalog),
+        'drop corrupt catalogue',
+      );
+      return null;
+    }
+  }
+
+  /// Starts work we deliberately do not wait on, while still logging failures
+  /// instead of letting them surface as an unhandled async error.
+  static void _fireAndForget(Future<void> future, String what) {
+    unawaited(
+      future.catchError((Object e, StackTrace st) {
+        Log.e('Content', 'Failed to $what', e, st);
+      }),
+    );
+  }
+}
