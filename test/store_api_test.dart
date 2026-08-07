@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dailyvalo/src/core/constants/riot_constants.dart';
+import 'package:dailyvalo/src/core/network/json_response_interceptor.dart';
 import 'package:dailyvalo/src/features/player/data/models/player_profile.dart';
 import 'package:dailyvalo/src/features/store/data/datasources/riot_store_api.dart';
 import 'package:dailyvalo/src/features/store/data/models/competitive_standing.dart';
@@ -21,9 +22,14 @@ typedef Route = (String pattern, int status, Object body);
 /// matching therefore cannot express "the record 404s but match history
 /// answers", which is exactly the case under test.
 class StubAdapter implements HttpClientAdapter {
-  StubAdapter(this.routes);
+  StubAdapter(this.routes, {this.contentType = 'application/json'});
 
   final List<Route> routes;
+
+  /// Content type served with every route. Riot announces `text/plain` on the
+  /// MMR endpoints while sending JSON, which is what made a 19 KB rank record
+  /// read as empty.
+  final String contentType;
 
   /// Every URL requested, in order.
   final List<String> requested = <String>[];
@@ -40,23 +46,31 @@ class StubAdapter implements HttpClientAdapter {
     final String url = options.uri.toString();
     requested.add(url);
     for (final Route route in routes) {
-      if (url.contains(route.$1)) return _json(route.$3, route.$2);
+      if (url.contains(route.$1)) return _body(route.$3, route.$2);
     }
-    return _json(const <String, dynamic>{}, 404);
+    return _body(const <String, dynamic>{}, 404);
   }
 
-  static ResponseBody _json(Object body, int status) =>
-      ResponseBody.fromString(
-        jsonEncode(body),
-        status,
-        headers: <String, List<String>>{
-          Headers.contentTypeHeader: <String>['application/json'],
-        },
-      );
+  ResponseBody _body(Object body, int status) => ResponseBody.fromString(
+    jsonEncode(body),
+    status,
+    headers: <String, List<String>>{
+      Headers.contentTypeHeader: <String>[contentType],
+    },
+  );
 }
 
 RiotStoreApi apiWith(StubAdapter adapter) =>
     RiotStoreApi(dio: Dio()..httpClientAdapter = adapter);
+
+/// A client wired the way the app wires it, including the interceptor that
+/// normalises JSON served under a non-JSON content type.
+RiotStoreApi productionLikeApiWith(StubAdapter adapter) {
+  final Dio dio = Dio()
+    ..httpClientAdapter = adapter
+    ..interceptors.add(const JsonResponseInterceptor());
+  return RiotStoreApi(dio: dio);
+}
 
 const String act = '4f0864e2-40af-28a4-de2c-0e9e64e75f23';
 
@@ -343,6 +357,73 @@ void main() {
       expect(attempts.first.ok, isFalse);
       expect(attempts.first.note, 'HTTP 404');
       expect(attempts.last.ok, isTrue);
+    });
+
+    test('parses a rank served without a JSON content type', () async {
+      // The real defect: Riot returns the MMR record as JSON but announces a
+      // content type Dio does not decode, so response.data arrives as a String.
+      // Every map lookup then yields nothing and a ranked player reads as
+      // Unranked — silently, with HTTP 200 and no exception anywhere.
+      final CompetitiveStanding? s = await productionLikeApiWith(
+        StubAdapter(
+          <Route>[
+            (
+              '/mmr/v1/players/',
+              200,
+              mmr(
+                seasonal: <String, dynamic>{
+                  act: <String, dynamic>{
+                    'CompetitiveTier': 21,
+                    'RankedRating': 34,
+                  },
+                },
+              ),
+            ),
+          ],
+          contentType: 'text/plain; charset=utf-8',
+        ),
+      ).fetchCompetitiveStanding(
+        shard: 'eu',
+        puuid: 'p',
+        actUuids: const <String>[act],
+      );
+
+      expect(s?.tier, 21);
+      expect(s?.rankedRating, 34);
+    });
+
+    test('parses match history served without a JSON content type', () async {
+      final CompetitiveStanding? s = await productionLikeApiWith(
+        StubAdapter(
+          <Route>[
+            (
+              'competitiveupdates',
+              200,
+              matches(<Map<String, dynamic>>[update(18, 72)]),
+            ),
+            ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+          ],
+          contentType: 'text/plain',
+        ),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p');
+
+      expect(s?.tier, 18);
+      expect(s?.rankedRating, 72);
+    });
+
+    test('a raw string body is decoded even without the interceptor', () async {
+      // Defence in depth: this layer is where a silent empty map becomes a
+      // wrong number on screen, so it does not rely on the interceptor.
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(
+          <Route>[
+            ('/mmr/v1/players/', 200, mmr(latestTier: 14, latestRr: 8)),
+          ],
+          contentType: 'text/plain',
+        ),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p');
+
+      expect(s?.tier, 14);
     });
 
     test('returns null instead of throwing when every source fails', () async {

@@ -55,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 96 unit tests, no device needed
+flutter test                # 99 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -141,6 +141,19 @@ comes from joining those UUIDs against the content catalogue — which is why th
 raw `StorefrontSnapshot` and the resolved `Shop` are separate types. The
 background worker persists and compares snapshots without ever loading the 4 MB
 catalogue.
+
+### Riot's content types are not uniform
+
+Dio only parses a response body when its `content-type` announces JSON. Riot
+does that on the wallet, storefront and entitlements routes but **not** on the
+MMR ones — those return the same JSON under a content type Dio leaves alone, so
+`response.data` arrives as a `String`.
+
+Every map lookup against a string yields nothing, so a 19 KB rank record read
+as "no rank" and the header confidently displayed *Unranked* for a ranked
+player. HTTP 200, no exception, nothing in the logs. `JsonResponseInterceptor`
+normalises this for every PD client, and the parsing layer decodes a raw string
+too rather than trusting that it was already handled.
 
 ### Detecting a shop reset
 
@@ -248,7 +261,7 @@ afterwards.
 
 ## Testing
 
-96 unit tests, no device or network required:
+99 unit tests, no device or network required:
 
 ```
 test/

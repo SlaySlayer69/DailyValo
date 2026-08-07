@@ -6,6 +6,7 @@ import '../constants/riot_constants.dart';
 import 'auth_interceptor.dart';
 import 'client_version.dart';
 import 'error_interceptor.dart';
+import 'json_response_interceptor.dart';
 import 'riot_session_manager.dart';
 
 /// Builds the three HTTP clients the app needs. They are deliberately separate:
@@ -37,6 +38,7 @@ abstract final class DioFactory {
       ),
     );
     dio.interceptors.add(CookieManager(cookieJar ?? CookieJar()));
+    dio.interceptors.add(const JsonResponseInterceptor());
     dio.interceptors.add(const ErrorMappingInterceptor());
     return dio;
   }
@@ -60,6 +62,10 @@ abstract final class DioFactory {
     final Dio replayClient = Dio(options);
 
     final Dio dio = Dio(options);
+    // First in the chain: Riot omits a JSON content type on some PD endpoints,
+    // and every layer above this one assumes it is handling maps.
+    dio.interceptors.add(const JsonResponseInterceptor());
+    replayClient.interceptors.add(const JsonResponseInterceptor());
     dio.interceptors.add(
       RiotAuthInterceptor(
         sessionManager: sessionManager,

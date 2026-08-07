@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../../../core/constants/riot_constants.dart';
@@ -309,6 +311,21 @@ class RiotStoreApi {
     return data.runtimeType.toString();
   }
 
-  static Map<String, dynamic> _asMap(Object? value) =>
-      value is Map<String, dynamic> ? value : const <String, dynamic>{};
+  /// Coerces a response fragment to a map.
+  ///
+  /// Also decodes a raw JSON string. The interceptor normally handles that,
+  /// but this is the layer where a silent empty map turns into a wrong number
+  /// on screen, so it does not assume.
+  static Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is String && value.isNotEmpty) {
+      try {
+        final Object? decoded = jsonDecode(value);
+        if (decoded is Map<String, dynamic>) return decoded;
+      } on FormatException {
+        // Fall through to the empty map.
+      }
+    }
+    return const <String, dynamic>{};
+  }
 }
