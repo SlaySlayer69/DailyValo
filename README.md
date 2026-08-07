@@ -55,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 65 unit tests, no device needed
+flutter test                # 74 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -179,7 +179,7 @@ in a `StatefulWidget` that repaints only the four characters that changed.
 
 | Data | Where | Why |
 | --- | --- | --- |
-| Password | **Nowhere** | Sent to Riot once, then discarded. |
+| Password | **Nowhere** | Typed into Riot's own page in a WebView; never seen by the app. |
 | RSO `ssid` cookie | Android Keystore (AES-GCM, RSA-wrapped) | Mints fresh access tokens without the password. Revocable by the user server-side. |
 | Access / entitlements / id tokens | Android Keystore | Expire in ~1 hour; refreshed silently. |
 | Wishlist, catalogue, shop snapshot | Hive (plain files) | Not sensitive. Nothing credential-shaped ever goes in a Hive box. |
@@ -191,20 +191,33 @@ you would like.
 
 ### The auth flow
 
+Sign-in happens in a **WebView on Riot's own hosted login page**. The app never
+sees the password.
+
 ```
-POST /api/v1/authorization        → opens a flow, sets the `asid` cookie
-PUT  /api/v1/authorization        → username + password
-      ├─ type: response           → tokens in the redirect fragment
-      ├─ type: multifactor        → 2FA code, PUT again
-      └─ type: auth + error       → bad credentials
+(WebView) GET /authorize          → user signs in on Riot's page
+                                    (2FA, captcha, Riot Mobile push — all theirs)
+          → 303 playvalorant.com/opt_in#access_token=…
 POST entitlements/api/token/v1    → X-Riot-Entitlements-JWT
 POST /userinfo                    → PUUID + Riot ID
 PUT  /pas/v1/product/valorant     → PAS token → live affinity → PD shard
 ```
 
-Later refreshes skip all of it: the `ssid` cookie is replayed against
-`GET /authorize`, which 303s back with a fresh token pair. That is the whole
-reason the password never needs storing.
+The direct username/password endpoint was tried first and removed. It cannot
+complete a sign-in for any account Riot protects with push confirmation or a
+captcha: it answers `auth_failure` even when the password is correct, which is
+indistinguishable from a typo and impossible for a user to act on.
+
+Later refreshes skip the WebView entirely: the `ssid` cookie captured from its
+jar is replayed against `GET /authorize`, which 303s back with a fresh token
+pair. That is what lets the **background isolate** refresh tokens — a WebView
+needs an Activity and cannot run from WorkManager.
+
+The cookie is read through a small `MethodChannel` rather than
+`webview_flutter`'s own `getCookies`, which splits each cookie on every `=` and
+keeps the last segment — silently truncating an opaque token that contains one.
+A truncated `ssid` would sign you in once and then quietly break every refresh
+afterwards.
 
 ### Two things worth knowing before you ship this
 
@@ -217,19 +230,16 @@ reason the password never needs storing.
    in `core/constants/riot_constants.dart` so an upstream change is a one-file
    fix.
 
-2. **Asking users for game credentials is a real trust ask.** The design here
-   minimises it as far as a password flow allows (nothing stored, keystore-only,
-   explicit on-screen disclosure). If you take this further, the cleanest
-   upgrade is to move sign-in to a **WebView against Riot's own hosted login
-   page** and capture the resulting cookie — the app then never touches the
-   password at all. That is the single change I would make before a public
-   release.
+2. **The app no longer handles credentials at all.** Sign-in is a WebView on
+   Riot's page; DailyValo only ever receives the redirect at the end. Keep it
+   that way — reintroducing a password field would both weaken this and break
+   sign-in for push-protected accounts.
 
 ---
 
 ## Testing
 
-65 unit tests, no device or network required:
+74 unit tests, no device or network required:
 
 ```
 test/

@@ -1,4 +1,3 @@
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 
 import '../../../../core/constants/riot_constants.dart';
@@ -7,160 +6,70 @@ import '../../../../core/network/dio_factory.dart';
 import '../../../../core/storage/secure_token_store.dart';
 import '../../../../core/utils/jwt.dart';
 import '../../../../core/utils/logger.dart';
-import '../models/auth_result.dart';
 import '../models/riot_session.dart';
 
 /// Riot Sign On + Entitlements, end to end.
 ///
-/// The flow, for anyone reading this later:
+/// Sign-in happens in a WebView on Riot's own hosted login page; this class
+/// picks up where that leaves off. The direct username/password endpoint used
+/// to live here and was removed, because it cannot complete a sign-in for any
+/// account Riot protects with push confirmation or a captcha — it answers
+/// `auth_failure` even when the password is correct, which is indistinguishable
+/// from a typo and impossible to act on.
+///
+/// What remains:
 ///
 /// ```
-///  POST /api/v1/authorization        -> sets the `asid` cookie, opens a flow
-///  PUT  /api/v1/authorization        -> username + password
-///        |- type: response           -> tokens in the redirect fragment
-///        |- type: multifactor        -> needs a 2FA code, PUT again with it
-///        `- type: auth + error       -> bad credentials
+///  (WebView) GET /authorize          -> user signs in, redirect carries tokens
 ///  POST /api/token/v1  (entitlements)-> X-Riot-Entitlements-JWT
 ///  POST /userinfo                    -> puuid + Riot ID
 ///  PUT  /pas/v1/product/valorant     -> PAS token, carries the live affinity
 /// ```
 ///
-/// Re-authentication later skips all of that: the `ssid` cookie handed out with
-/// `remember: true` is replayed against `GET /authorize`, which 303s straight
-/// back with a fresh token pair. That is why the password never needs storing.
+/// Later refreshes skip the WebView entirely: the `ssid` cookie captured from
+/// its jar is replayed against `GET /authorize`, which 303s back with a fresh
+/// token pair. That is what lets the *background isolate* refresh tokens — a
+/// WebView needs an Activity and cannot run from WorkManager.
 class RiotAuthApi {
   RiotAuthApi({required SecureTokenStore secureStore})
     : _secureStore = secureStore;
 
   final SecureTokenStore _secureStore;
 
-  /// Kept alive between [login] and [submitMultifactorCode]: the 2FA `PUT` has
-  /// to land on the same RSO flow, which is identified purely by the cookie.
-  Dio? _pendingLoginClient;
-  CookieJar? _pendingLoginJar;
-
   // ---------------------------------------------------------------------------
   // Sign in
   // ---------------------------------------------------------------------------
 
-  /// Starts a password sign-in.
+  /// Finishes a WebView sign-in.
   ///
-  /// [password] is used for exactly one request and is never persisted, logged
-  /// or copied anywhere else.
-  Future<AuthResult> login({
-    required String username,
-    required String password,
+  /// [ssidCookie] is the session cookie lifted from the WebView's jar. Without
+  /// it the session still works until the access token lapses in about an
+  /// hour, after which the user has to sign in again — so a missing cookie is
+  /// logged loudly rather than passed over.
+  Future<RiotSession> completeWebLogin({
+    required String accessToken,
+    required String idToken,
+    required int expiresInSeconds,
+    String? ssidCookie,
   }) async {
-    final CookieJar jar = CookieJar();
-    final Dio dio = DioFactory.createAuthClient(cookieJar: jar);
-    _pendingLoginJar = jar;
-    _pendingLoginClient = dio;
-
-    // 1. Open an authorization flow. The response body is uninteresting; what
-    //    matters is the cookie the server sets.
-    await dio.post<dynamic>(
-      RiotConstants.authorizationUrl,
-      data: <String, dynamic>{
-        'client_id': RiotConstants.clientId,
-        'nonce': RiotConstants.nonce,
-        'redirect_uri': RiotConstants.redirectUri,
-        'response_type': RiotConstants.responseType,
-        'scope': RiotConstants.scope,
-      },
-    );
-
-    // 2. Submit credentials into that flow.
-    final Response<dynamic> response = await dio.put<dynamic>(
-      RiotConstants.authorizationUrl,
-      data: <String, dynamic>{
-        'type': 'auth',
-        'username': username,
-        'password': password,
-        'remember': true,
-        'language': 'en_US',
-      },
-    );
-
-    return _interpretAuthResponse(response, jar);
-  }
-
-  /// Completes a sign-in that Riot interrupted with a 2FA challenge.
-  Future<AuthResult> submitMultifactorCode(String code) async {
-    final Dio? dio = _pendingLoginClient;
-    final CookieJar? jar = _pendingLoginJar;
-    if (dio == null || jar == null) {
-      return const AuthFailure(
-        'That sign-in attempt expired. Please start again.',
-        code: 'no_pending_flow',
+    if (ssidCookie != null && ssidCookie.isNotEmpty) {
+      await _secureStore.writeSessionCookie(ssidCookie);
+    } else {
+      Log.e(
+        'Auth',
+        'No ssid cookie captured — background refresh will not work and the '
+            'session will end when the access token expires',
       );
     }
 
-    final Response<dynamic> response = await dio.put<dynamic>(
-      RiotConstants.authorizationUrl,
-      data: <String, dynamic>{
-        'type': 'multifactor',
-        'code': code.trim(),
-        'rememberDevice': true,
-      },
+    return _buildSession(
+      _TokenPair(
+        accessToken: accessToken,
+        idToken: idToken,
+        expiresIn: expiresInSeconds,
+      ),
     );
-
-    return _interpretAuthResponse(response, jar);
   }
-
-  /// Drops any half-finished sign-in (user backed out of the 2FA prompt).
-  void abandonPendingLogin() {
-    _pendingLoginClient?.close(force: true);
-    _pendingLoginClient = null;
-    _pendingLoginJar = null;
-  }
-
-  Future<AuthResult> _interpretAuthResponse(
-    Response<dynamic> response,
-    CookieJar jar,
-  ) async {
-    final Map<String, dynamic> body = _asMap(response.data);
-    final String type = body['type'] as String? ?? '';
-
-    switch (type) {
-      case 'response':
-        final String? uri =
-            (_asMap(_asMap(body['response'])['parameters'])['uri'])
-                as String?;
-        if (uri == null) {
-          throw const ParseException(
-            'Riot accepted the sign-in but returned no tokens.',
-          );
-        }
-        final _TokenPair tokens = _parseRedirect(uri);
-        await _persistSessionCookie(jar);
-        final RiotSession session = await _buildSession(tokens);
-        abandonPendingLogin();
-        return AuthSuccess(session);
-
-      case 'multifactor':
-        final Map<String, dynamic> mfa = _asMap(body['multifactor']);
-        return AuthMultifactorRequired(
-          email: mfa['email'] as String? ?? 'your registered address',
-          codeLength: (mfa['multiFactorCodeLength'] as num?)?.toInt() ?? 6,
-          method: mfa['method'] as String? ?? 'email',
-        );
-
-      case 'auth':
-      default:
-        final String? error = body['error'] as String?;
-        abandonPendingLogin();
-        return AuthFailure(_messageForAuthError(error), code: error);
-    }
-  }
-
-  static String _messageForAuthError(String? code) => switch (code) {
-    'auth_failure' => 'Incorrect username or password.',
-    'invalid_session_id' => 'That sign-in attempt expired. Please try again.',
-    'rate_limited' => 'Too many attempts. Wait a few minutes and try again.',
-    'multifactor_attempt_failed' => 'That code is not right. Check and retry.',
-    null => 'Sign-in failed. Please try again.',
-    _ => 'Sign-in failed ($code).',
-  };
 
   // ---------------------------------------------------------------------------
   // Re-authentication (silent refresh)
@@ -348,20 +257,6 @@ class RiotAuthApi {
       idToken: params['id_token'] ?? '',
       expiresIn: int.tryParse(params['expires_in'] ?? '') ?? 3600,
     );
-  }
-
-  Future<void> _persistSessionCookie(CookieJar jar) async {
-    final List<Cookie> cookies = await jar.loadForRequest(
-      Uri.parse(RiotConstants.authBase),
-    );
-    for (final Cookie cookie in cookies) {
-      if (cookie.name == RiotConstants.sessionCookieName &&
-          cookie.value.isNotEmpty) {
-        await _secureStore.writeSessionCookie(cookie.value);
-        return;
-      }
-    }
-    Log.d('Auth', 'No ssid cookie in the jar — refresh will need a re-login');
   }
 
   static String? _ssidFromSetCookie(Headers headers) {

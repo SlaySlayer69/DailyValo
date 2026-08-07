@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/storage_keys.dart';
 import '../core/network/riot_session_manager.dart';
+import '../core/network/webview_cookie_reader.dart';
 import '../core/storage/local_store.dart';
 import '../features/auth/data/datasources/riot_auth_api.dart';
 import '../features/content/data/models/content_catalog.dart';
@@ -122,6 +123,11 @@ class AppModeController extends Notifier<AppMode> {
   Future<void> signOut() async {
     await BackgroundScheduler.cancelAll();
     await ref.read(notificationServiceProvider).cancelAll();
+
+    // Riot's login lives in a WebView with its own cookie jar. Clearing our
+    // keystore alone would leave that jar intact, and the next sign-in would
+    // sail straight past the login page back into the same account.
+    await const WebViewCookieReader().clear();
     await ref.read(localStoreProvider).putSetting(SettingKeys.demoMode, false);
     await ref.read(sessionManagerProvider).signOut();
 

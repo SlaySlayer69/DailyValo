@@ -25,19 +25,6 @@ class AuthException extends AppException {
   final bool requiresReLogin;
 }
 
-/// Riot asked for a 2FA code before it will issue tokens.
-class MultifactorRequiredException extends AppException {
-  const MultifactorRequiredException({
-    required this.email,
-    required this.codeLength,
-    String message = 'A multi-factor code is required.',
-  }) : super(message);
-
-  /// Obfuscated address Riot mailed the code to, e.g. `k****@g****.com`.
-  final String email;
-  final int codeLength;
-}
-
 /// The API answered, but not with something we can use.
 class ApiException extends AppException {
   const ApiException(super.message, {this.statusCode, super.cause});
