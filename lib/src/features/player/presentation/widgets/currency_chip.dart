@@ -90,10 +90,15 @@ class BalanceChip extends StatelessWidget {
     required this.amount,
     required this.currency,
     super.key,
+    this.known = true,
   });
 
   final int amount;
   final Currency currency;
+
+  /// False when the wallet lookup failed. Renders an em dash: 0 is a perfectly
+  /// plausible balance, so showing one we never received reads as fact.
+  final bool known;
 
   @override
   Widget build(BuildContext context) {
@@ -108,9 +113,9 @@ class BalanceChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
-            Formatters.points(amount),
+            known ? Formatters.points(amount) : '—',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.textPrimary,
+              color: known ? AppColors.textPrimary : AppColors.textTertiary,
               fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),

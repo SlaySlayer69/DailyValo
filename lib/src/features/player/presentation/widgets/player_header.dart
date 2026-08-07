@@ -44,8 +44,11 @@ class PlayerHeader extends ConsumerWidget {
       ),
       child: profile.when(
         loading: () => const _HeaderSkeleton(),
+        // Reaching this now means there is no session at all — every network
+        // failure is contained inside the repository and still yields a
+        // profile built from the session.
         error: (Object _, StackTrace _) => _HeaderFallback(
-          message: 'Profile unavailable',
+          message: 'Not signed in',
           onTap: onTapProfile,
         ),
         data: (PlayerProfile data) => _HeaderContent(
@@ -125,11 +128,13 @@ class _HeaderContent extends StatelessWidget {
             BalanceChip(
               amount: profile.wallet.valorantPoints,
               currency: Currency.valorantPoints,
+              known: profile.walletKnown,
             ),
             const SizedBox(height: 5),
             BalanceChip(
               amount: profile.wallet.radianitePoints,
               currency: Currency.radianitePoints,
+              known: profile.walletKnown,
             ),
           ],
         ),

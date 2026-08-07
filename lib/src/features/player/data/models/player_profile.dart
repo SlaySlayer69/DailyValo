@@ -39,6 +39,7 @@ class PlayerProfile {
     required this.rankedRating,
     required this.updatedAt,
     this.rankKnown = true,
+    this.walletKnown = true,
   });
 
   final String puuid;
@@ -57,6 +58,11 @@ class PlayerProfile {
   /// would have the header confidently state something untrue.
   final bool rankKnown;
 
+  /// False when the wallet lookup failed. Same reasoning: a balance of 0 is a
+  /// perfectly plausible number, so showing one we did not actually receive is
+  /// worse than showing nothing.
+  final bool walletKnown;
+
   final DateTime updatedAt;
 
   String get riotId => tagLine.isEmpty ? gameName : '$gameName#$tagLine';
@@ -66,6 +72,7 @@ class PlayerProfile {
     int? competitiveTier,
     int? rankedRating,
     bool? rankKnown,
+    bool? walletKnown,
   }) => PlayerProfile(
     puuid: puuid,
     gameName: gameName,
@@ -74,6 +81,7 @@ class PlayerProfile {
     competitiveTier: competitiveTier ?? this.competitiveTier,
     rankedRating: rankedRating ?? this.rankedRating,
     rankKnown: rankKnown ?? this.rankKnown,
+    walletKnown: walletKnown ?? this.walletKnown,
     updatedAt: DateTime.now(),
   );
 
@@ -85,6 +93,7 @@ class PlayerProfile {
     'competitiveTier': competitiveTier,
     'rankedRating': rankedRating,
     'rankKnown': rankKnown,
+    'walletKnown': walletKnown,
     'updatedAt': updatedAt.toIso8601String(),
   };
 
@@ -100,6 +109,7 @@ class PlayerProfile {
       competitiveTier: (json['competitiveTier'] as num?)?.toInt() ?? 0,
       rankedRating: (json['rankedRating'] as num?)?.toInt() ?? 0,
       rankKnown: json['rankKnown'] as bool? ?? true,
+      walletKnown: json['walletKnown'] as bool? ?? true,
       updatedAt:
           DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
           DateTime.now(),

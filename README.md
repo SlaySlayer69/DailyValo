@@ -55,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 82 unit tests, no device needed
+flutter test                # 90 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -248,7 +248,7 @@ afterwards.
 
 ## Testing
 
-82 unit tests, no device or network required:
+90 unit tests, no device or network required:
 
 ```
 test/
@@ -261,6 +261,7 @@ test/
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection
 ├── wallet_and_rank_test.dart       Currency UUIDs, unranked-vs-unknown
+├── store_api_test.dart             PD endpoint parsing and fallbacks (stubbed HTTP)
 └── support/fixtures.dart           Realistic API payloads
 ```
 

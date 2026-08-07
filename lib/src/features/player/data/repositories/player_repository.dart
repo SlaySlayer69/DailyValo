@@ -56,35 +56,60 @@ class PlayerRepository {
     return profile;
   }
 
+  /// Builds the live profile.
+  ///
+  /// Every part is fetched independently and every failure is contained. The
+  /// header must never go blank: the Riot ID comes from the session and needs
+  /// no network at all, so there is no failure mode in which we know nothing
+  /// about the player. An earlier version gathered wallet and rank with
+  /// `(a, b).wait`, which throws if *either* side fails — one unavailable
+  /// endpoint took out the entire header, Riot ID included.
   Future<PlayerProfile> _fetchLiveProfile() async {
     final RiotSession? session = _sessions.session;
     if (session == null) throw const NotAuthenticatedException();
 
-    // The act uuid keys the MMR record; it is cached, so this is usually free.
-    final String? actUuid = await _content.currentActUuid();
-
-    // Independent calls; run them together to keep header latency down.
-    final results = await (
-      _api.fetchWallet(shard: session.shard, puuid: session.puuid),
-      _api.fetchCompetitiveStanding(
-        shard: session.shard,
-        puuid: session.puuid,
-        actUuid: actUuid,
-      ),
-    ).wait;
-    final Wallet wallet = results.$1;
-    final CompetitiveStanding? standing = results.$2;
+    final Wallet? wallet = await _tryWallet(session);
+    final CompetitiveStanding? standing = await _tryStanding(session);
 
     return PlayerProfile(
       puuid: session.puuid,
       gameName: session.gameName,
       tagLine: session.tagLine,
-      wallet: wallet,
+      wallet: wallet ?? Wallet.empty,
+      walletKnown: wallet != null,
       competitiveTier: standing?.tier ?? 0,
       rankedRating: standing?.rankedRating ?? 0,
       rankKnown: standing != null,
       updatedAt: DateTime.now(),
     );
+  }
+
+  Future<Wallet?> _tryWallet(RiotSession session) async {
+    try {
+      return await _api.fetchWallet(
+        shard: session.shard,
+        puuid: session.puuid,
+      );
+    } on Object catch (e) {
+      Log.e('Player', 'Wallet unavailable', e);
+      return null;
+    }
+  }
+
+  Future<CompetitiveStanding?> _tryStanding(RiotSession session) async {
+    try {
+      // The act uuid keys the MMR record. Cached, so usually free — and its
+      // own failure must not cost us the rank, let alone the whole header.
+      final String? actUuid = await _content.currentActUuid();
+      return await _api.fetchCompetitiveStanding(
+        shard: session.shard,
+        puuid: session.puuid,
+        actUuid: actUuid,
+      );
+    } on Object catch (e) {
+      Log.e('Player', 'Competitive standing unavailable', e);
+      return null;
+    }
   }
 
   PlayerProfile _buildDemoProfile() {

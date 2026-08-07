@@ -7,6 +7,7 @@ import '../../../../app/theme/app_theme.dart';
 import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../services/background/shop_sync_service.dart';
+import '../../../../services/diagnostics/connection_diagnostics.dart';
 import '../../../../services/notifications/notification_service.dart';
 
 /// Account and notification settings, reached from the header.
@@ -107,6 +108,15 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
                   : null,
             ),
             ListTile(
+              onTap: _busy ? null : _runDiagnostics,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Diagnostics'),
+              subtitle: const Text(
+                'Checks each Riot endpoint and shows what it returned',
+              ),
+            ),
+            ListTile(
               onTap: _busy ? null : _sendTestNotification,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.notifications_active_outlined),
@@ -166,6 +176,22 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     }
   }
 
+  Future<void> _runDiagnostics() async {
+    setState(() => _busy = true);
+    try {
+      final List<DiagnosticResult> results = await ConnectionDiagnostics(
+        ref.read(appDependenciesProvider),
+      ).run();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext _) => _DiagnosticsDialog(results: results),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _sendTestNotification() async {
     final NotificationService notifications = ref.read(
       notificationServiceProvider,
@@ -193,5 +219,68 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Shows one line per probed endpoint, so an unhealthy account can be reported
+/// precisely rather than as "it doesn't work".
+class _DiagnosticsDialog extends StatelessWidget {
+  const _DiagnosticsDialog({required this.results});
+
+  final List<DiagnosticResult> results;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Diagnostics'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (final DiagnosticResult r in results)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      r.ok
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.cancel_outlined,
+                      size: 17,
+                      color: r.ok ? AppColors.success : AppColors.danger,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            r.label,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(color: AppColors.textPrimary),
+                          ),
+                          if (r.detail != null)
+                            Text(
+                              r.detail!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
   }
 }
