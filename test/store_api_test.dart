@@ -5,17 +5,27 @@ import 'package:dailyvalo/src/core/constants/riot_constants.dart';
 import 'package:dailyvalo/src/features/player/data/models/player_profile.dart';
 import 'package:dailyvalo/src/features/store/data/datasources/riot_store_api.dart';
 import 'package:dailyvalo/src/features/store/data/models/competitive_standing.dart';
+import 'package:dailyvalo/src/features/store/data/models/rank_attempt.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Serves canned responses per URL substring, so the API layer can be exercised
-/// without a network or a Riot account.
-class _StubAdapter implements HttpClientAdapter {
-  _StubAdapter(this.routes);
+/// One canned response, matched on a URL substring.
+typedef Route = (String pattern, int status, Object body);
 
-  /// URL substring -> (status, json body). A missing route yields 404.
-  final Map<String, (int, Object)> routes;
+/// Serves canned responses so the API layer can be exercised without a network
+/// or a Riot account.
+///
+/// Routes are an **ordered** list, first match wins — deliberately not a map
+/// keyed by substring. The rank endpoints nest: `/mmr/v1/players/{puuid}` is a
+/// prefix of that same player's `/competitiveupdates`. Unordered substring
+/// matching therefore cannot express "the record 404s but match history
+/// answers", which is exactly the case under test.
+class StubAdapter implements HttpClientAdapter {
+  StubAdapter(this.routes);
 
+  final List<Route> routes;
+
+  /// Every URL requested, in order.
   final List<String> requested = <String>[];
 
   @override
@@ -27,99 +37,102 @@ class _StubAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    requested.add(options.uri.toString());
-    for (final MapEntry<String, (int, Object)> route in routes.entries) {
-      if (options.uri.toString().contains(route.key)) {
-        return ResponseBody.fromString(
-          jsonEncode(route.value.$2),
-          route.value.$1,
-          headers: <String, List<String>>{
-            Headers.contentTypeHeader: <String>['application/json'],
-          },
-        );
-      }
+    final String url = options.uri.toString();
+    requested.add(url);
+    for (final Route route in routes) {
+      if (url.contains(route.$1)) return _json(route.$3, route.$2);
     }
-    return ResponseBody.fromString('{}', 404,
+    return _json(const <String, dynamic>{}, 404);
+  }
+
+  static ResponseBody _json(Object body, int status) =>
+      ResponseBody.fromString(
+        jsonEncode(body),
+        status,
         headers: <String, List<String>>{
           Headers.contentTypeHeader: <String>['application/json'],
-        });
-  }
+        },
+      );
 }
 
-RiotStoreApi _apiWith(_StubAdapter adapter) {
-  final Dio dio = Dio()..httpClientAdapter = adapter;
-  return RiotStoreApi(dio: dio);
-}
+RiotStoreApi apiWith(StubAdapter adapter) =>
+    RiotStoreApi(dio: Dio()..httpClientAdapter = adapter);
 
-const String _act = '4f0864e2-40af-28a4-de2c-0e9e64e75f23';
+const String act = '4f0864e2-40af-28a4-de2c-0e9e64e75f23';
+
+/// A rated match entry as `/competitiveupdates` returns it.
+Map<String, dynamic> update(int tier, int rr) => <String, dynamic>{
+  'TierAfterUpdate': tier,
+  'RankedRatingAfterUpdate': rr,
+};
+
+Map<String, dynamic> matches(List<Map<String, dynamic>> list) =>
+    <String, dynamic>{'Matches': list};
+
+/// The full MMR record shape.
+Map<String, dynamic> mmr({
+  Map<String, dynamic>? seasonal,
+  int latestTier = 0,
+  int latestRr = 0,
+}) => <String, dynamic>{
+  'QueueSkills': <String, dynamic>{
+    'competitive': <String, dynamic>{
+      'SeasonalInfoBySeasonID': seasonal ?? <String, dynamic>{},
+    },
+  },
+  'LatestCompetitiveUpdate': update(latestTier, latestRr),
+};
 
 void main() {
   group('fetchWallet', () {
     test('reads all three balances by their currency uuid', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/store/v1/wallet/': (200, <String, dynamic>{
+      final Wallet wallet = await apiWith(
+        StubAdapter(<Route>[
+          ('/store/v1/wallet/', 200, <String, dynamic>{
             'Balances': <String, dynamic>{
               RiotConstants.currencyValorantPoints: 1265,
-              RiotConstants.currencyRadianitePoints: 40,
+              RiotConstants.currencyRadianitePoints: 250,
               RiotConstants.currencyKingdomCredits: 8150,
             },
           }),
-        }),
-      );
+        ]),
+      ).fetchWallet(shard: 'eu', puuid: 'p');
 
-      final Wallet wallet = await api.fetchWallet(shard: 'eu', puuid: 'p');
       expect(wallet.valorantPoints, 1265);
-      expect(wallet.radianitePoints, 40);
+      expect(wallet.radianitePoints, 250);
       expect(wallet.kingdomCredits, 8150);
     });
 
     test('a currency Riot omits reads as zero, not an error', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/store/v1/wallet/': (200, <String, dynamic>{
+      final Wallet wallet = await apiWith(
+        StubAdapter(<Route>[
+          ('/store/v1/wallet/', 200, <String, dynamic>{
             'Balances': <String, dynamic>{
               RiotConstants.currencyValorantPoints: 500,
             },
           }),
-        }),
-      );
+        ]),
+      ).fetchWallet(shard: 'eu', puuid: 'p');
 
-      final Wallet wallet = await api.fetchWallet(shard: 'eu', puuid: 'p');
       expect(wallet.valorantPoints, 500);
       expect(wallet.radianitePoints, 0);
     });
   });
 
   group('fetchCompetitiveStanding', () {
-    Map<String, dynamic> mmr({
-      Map<String, dynamic>? seasonal,
-      int latestTier = 0,
-      int latestRr = 0,
-    }) => <String, dynamic>{
-      'QueueSkills': <String, dynamic>{
-        'competitive': <String, dynamic>{
-          'SeasonalInfoBySeasonID': seasonal ?? <String, dynamic>{},
-        },
-      },
-      'LatestCompetitiveUpdate': <String, dynamic>{
-        'TierAfterUpdate': latestTier,
-        'RankedRatingAfterUpdate': latestRr,
-      },
-    };
-
     test('prefers the current act\'s seasonal entry', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/mmr/v1/players/': (
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          (
+            '/mmr/v1/players/',
             200,
             mmr(
               seasonal: <String, dynamic>{
-                _act: <String, dynamic>{
+                act: <String, dynamic>{
                   'CompetitiveTier': 22,
                   'RankedRating': 47,
                 },
-                'some-older-act': <String, dynamic>{
+                'older-act': <String, dynamic>{
                   'CompetitiveTier': 15,
                   'RankedRating': 90,
                 },
@@ -128,107 +141,163 @@ void main() {
               latestRr: 90,
             ),
           ),
-        }),
-      );
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
 
-      final CompetitiveStanding? s = await api.fetchCompetitiveStanding(
-        shard: 'eu',
-        puuid: 'p',
-        actUuid: _act,
-      );
-      expect(s, isNotNull);
-      expect(s!.tier, 22);
-      expect(s.rankedRating, 47);
+      expect(s?.tier, 22);
+      expect(s?.rankedRating, 47);
     });
 
     test('falls back to the latest update when the act has no entry', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/mmr/v1/players/': (200, mmr(latestTier: 18, latestRr: 33)),
-        }),
-      );
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          ('/mmr/v1/players/', 200, mmr(latestTier: 18, latestRr: 33)),
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
 
-      final CompetitiveStanding? s = await api.fetchCompetitiveStanding(
-        shard: 'eu',
-        puuid: 'p',
-        actUuid: _act,
-      );
       expect(s?.tier, 18);
       expect(s?.rankedRating, 33);
     });
 
     test('works without an act uuid at all', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/mmr/v1/players/': (200, mmr(latestTier: 12, latestRr: 5)),
-        }),
-      );
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          ('/mmr/v1/players/', 200, mmr(latestTier: 12, latestRr: 5)),
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p');
 
-      expect(
-        (await api.fetchCompetitiveStanding(shard: 'eu', puuid: 'p'))?.tier,
-        12,
-      );
+      expect(s?.tier, 12);
     });
 
-    test('reports genuine unranked when the record carries no rank', () async {
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/mmr/v1/players/': (200, mmr()),
-        }),
-      );
+    test('falls back to match history when the MMR record 404s', () async {
+      // The reported failure: MMR 404s while every other endpoint answers 200.
+      final StubAdapter adapter = StubAdapter(<Route>[
+        (
+          'competitiveupdates',
+          200,
+          matches(<Map<String, dynamic>>[update(20, 61)]),
+        ),
+        ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+      ]);
 
-      final CompetitiveStanding? s = await api.fetchCompetitiveStanding(
-        shard: 'eu',
-        puuid: 'p',
-        actUuid: _act,
-      );
-      expect(s, isNotNull, reason: 'Riot answered; this is a real unranked');
-      expect(s!.isUnranked, isTrue);
-    });
+      final CompetitiveStanding? s = await apiWith(
+        adapter,
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
 
-    test('falls back to /competitiveupdates when the MMR record 404s', () async {
-      final _StubAdapter adapter = _StubAdapter(<String, (int, Object)>{
-        'competitiveupdates': (200, <String, dynamic>{
-          'Matches': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'TierAfterUpdate': 20,
-              'RankedRatingAfterUpdate': 61,
-            },
-          ],
-        }),
-      });
-      final RiotStoreApi api = _apiWith(adapter);
-
-      final CompetitiveStanding? s = await api.fetchCompetitiveStanding(
-        shard: 'eu',
-        puuid: 'p',
-        actUuid: _act,
-      );
       expect(s?.tier, 20);
+      expect(s?.rankedRating, 61);
       expect(
         adapter.requested.any((String u) => u.contains('competitiveupdates')),
         isTrue,
       );
     });
 
+    test('scans past unrated matches instead of taking the first', () async {
+      // Placement and unrated results carry TierAfterUpdate 0. Reading only the
+      // head of the list reported a ranked player as unranked.
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          (
+            'competitiveupdates',
+            200,
+            matches(<Map<String, dynamic>>[
+              update(0, 0),
+              update(0, 0),
+              update(21, 12),
+            ]),
+          ),
+          ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+
+      expect(s?.tier, 21);
+      expect(s?.rankedRating, 12);
+    });
+
+    test('asks for a window of matches, not just the latest one', () async {
+      final StubAdapter adapter = StubAdapter(<Route>[
+        ('competitiveupdates', 200, matches(const <Map<String, dynamic>>[])),
+        ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+      ]);
+
+      await apiWith(adapter).fetchCompetitiveStanding(shard: 'eu', puuid: 'p');
+
+      expect(
+        adapter.requested.any((String u) => u.contains('endIndex=20')),
+        isTrue,
+        reason: 'endIndex=1 let a single unrated match hide a real rank',
+      );
+    });
+
+    test('falls back to the unfiltered queue when competitive is empty',
+        () async {
+      final StubAdapter adapter = StubAdapter(<Route>[
+        // Ordered: the competitive-filtered request matches this first route.
+        ('queue=competitive', 200, matches(const <Map<String, dynamic>>[])),
+        (
+          'competitiveupdates',
+          200,
+          matches(<Map<String, dynamic>>[update(17, 80)]),
+        ),
+        ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+      ]);
+
+      final CompetitiveStanding? s = await apiWith(
+        adapter,
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p');
+
+      expect(s?.tier, 17);
+    });
+
+    test('reports genuine unranked when every source answers empty', () async {
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          ('competitiveupdates', 200, matches(const <Map<String, dynamic>>[])),
+          ('/mmr/v1/players/', 200, mmr()),
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
+
+      expect(s, isNotNull, reason: 'Riot answered; this is a real unranked');
+      expect(s!.isUnranked, isTrue);
+    });
+
+    test('records what each source did, for the diagnostics screen', () async {
+      final List<RankAttempt> attempts = <RankAttempt>[];
+
+      await apiWith(
+        StubAdapter(<Route>[
+          (
+            'competitiveupdates',
+            200,
+            matches(<Map<String, dynamic>>[update(20, 61)]),
+          ),
+          ('/mmr/v1/players/', 404, const <String, dynamic>{}),
+        ]),
+      ).fetchCompetitiveStanding(
+        shard: 'eu',
+        puuid: 'p',
+        actUuid: act,
+        attempts: attempts,
+      );
+
+      expect(attempts, hasLength(greaterThanOrEqualTo(2)));
+      expect(attempts.first.source, contains('MMR record'));
+      expect(attempts.first.ok, isFalse);
+      expect(attempts.first.note, 'HTTP 404');
+      expect(attempts.last.ok, isTrue);
+    });
+
     test('returns null instead of throwing when every source fails', () async {
       // The contract the header depends on: rank is decoration, so an outage
       // must degrade to "unknown" rather than take the profile down with it.
-      final RiotStoreApi api = _apiWith(
-        _StubAdapter(<String, (int, Object)>{
-          '/mmr/v1/players/': (500, <String, dynamic>{}),
-          'competitiveupdates': (500, <String, dynamic>{}),
-        }),
-      );
+      final CompetitiveStanding? s = await apiWith(
+        StubAdapter(<Route>[
+          ('competitiveupdates', 500, const <String, dynamic>{}),
+          ('/mmr/v1/players/', 500, const <String, dynamic>{}),
+        ]),
+      ).fetchCompetitiveStanding(shard: 'eu', puuid: 'p', actUuid: act);
 
-      expect(
-        await api.fetchCompetitiveStanding(
-          shard: 'eu',
-          puuid: 'p',
-          actUuid: _act,
-        ),
-        isNull,
-      );
+      expect(s, isNull);
     });
   });
 }

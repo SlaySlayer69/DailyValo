@@ -113,15 +113,28 @@ class ContentRepository {
     return cached;
   }
 
+  Future<void>? _versionSync;
+
   /// Refreshes the `X-Riot-ClientVersion` used by PD requests.
   ///
-  /// Best-effort: a stale-but-plausible version still works for a while, and
-  /// failing app start over it would be absurd.
-  Future<void> syncClientVersion() async {
+  /// Memoised, so callers that need the header to be current can simply await
+  /// it without causing a second fetch. Bounded and best-effort: a
+  /// stale-but-plausible version still works for most endpoints, and failing
+  /// app start over a third-party CDN would be absurd.
+  Future<void> syncClientVersion() =>
+      _versionSync ??= _doSyncClientVersion();
+
+  Future<void> _doSyncClientVersion() async {
     try {
-      await _clientVersion.update(await _client.fetchClientVersion());
+      final String version = await _client.fetchClientVersion().timeout(
+        const Duration(seconds: 8),
+      );
+      await _clientVersion.update(version);
+      Log.d('Content', 'Client version: $version');
     } on Object catch (e) {
       Log.e('Content', 'Client version sync failed; keeping cached value', e);
+      // Do not memoise a failure for the life of the process.
+      _versionSync = null;
     }
   }
 

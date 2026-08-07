@@ -55,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 90 unit tests, no device needed
+flutter test                # 94 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -248,7 +248,7 @@ afterwards.
 
 ## Testing
 
-90 unit tests, no device or network required:
+94 unit tests, no device or network required:
 
 ```
 test/

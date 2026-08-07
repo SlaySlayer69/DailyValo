@@ -39,10 +39,11 @@ Future<void> main() async {
 
   final AppDependencies deps = await AppDependencies.bootstrap();
 
-  // Keep the PD client version current. Deliberately not awaited: it is a
-  // best-effort refresh of a cached value, and blocking first paint on a
-  // third-party CDN would be the wrong trade.
-  unawaited(deps.content.syncClientVersion());
+  // Awaited, not fired-and-forgotten: some PD endpoints reject a stale
+  // X-Riot-ClientVersion, and racing the first authenticated request against
+  // this fetch made one endpoint fail while the rest succeeded. The call is
+  // internally bounded to 8s and never throws, so start-up cannot hang on it.
+  await deps.content.syncClientVersion();
 
   await BackgroundScheduler.initialise();
   if (deps.canFetchShop) {

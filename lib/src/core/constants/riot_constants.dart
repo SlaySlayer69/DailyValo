@@ -45,8 +45,12 @@ abstract final class RiotConstants {
 
   /// Fallback used when `valorant-api.com/v1/version` cannot be reached.
   /// The live value is fetched at runtime; this only keeps requests well-formed.
+  /// Only used until the live value arrives from valorant-api.com. Keep it
+  /// roughly current anyway: some PD endpoints are stricter about this header
+  /// than others, and a years-stale value is a plausible cause of a 404 on one
+  /// endpoint while the rest answer fine.
   static const String fallbackClientVersion =
-      'release-09.11-shipping-9-3120818';
+      'release-13.02-shipping-10-5229475';
 
   // ---------------------------------------------------------------------------
   // Player Data (PD) endpoints — `{shard}` is substituted at runtime.
@@ -69,9 +73,20 @@ abstract final class RiotConstants {
   static String mmrPlayer(String shard, String puuid) =>
       '${pdBase(shard)}/mmr/v1/players/$puuid';
 
-  static String competitiveUpdates(String shard, String puuid) =>
+  /// Recent rated matches.
+  ///
+  /// [endIndex] defaults to 20 rather than 1: asking for a single match means
+  /// one unrated or placement result at the top of the list hides an otherwise
+  /// perfectly good rank.
+  static String competitiveUpdates(
+    String shard,
+    String puuid, {
+    int endIndex = 20,
+    String? queue = 'competitive',
+  }) =>
       '${pdBase(shard)}/mmr/v1/players/$puuid/competitiveupdates'
-      '?startIndex=0&endIndex=1&queue=competitive';
+      '?startIndex=0&endIndex=$endIndex'
+      '${queue == null ? '' : '&queue=$queue'}';
 
   // ---------------------------------------------------------------------------
   // Well-known UUIDs

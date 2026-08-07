@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import '../../app/dependencies.dart';
 import '../../core/constants/riot_constants.dart';
 import '../../features/auth/data/models/riot_session.dart';
+import '../../features/store/data/models/competitive_standing.dart';
+import '../../features/store/data/models/rank_attempt.dart';
 
 /// One probe result.
 class DiagnosticResult {
@@ -58,14 +60,38 @@ class ConnectionDiagnostics {
         ),
       ),
     );
+    // Rank is resolved through several endpoints; report what each one did
+    // rather than a single pass/fail that hides which source is broken.
+    final String? act = await _deps.content.currentActUuid();
+    final List<RankAttempt> attempts = <RankAttempt>[];
+    final CompetitiveStanding? standing = await _deps.storeApi
+        .fetchCompetitiveStanding(
+          shard: session.shard,
+          puuid: session.puuid,
+          actUuid: act,
+          attempts: attempts,
+        );
+
     results.add(
-      await _probe(
-        'Rank (MMR)',
-        () => _deps.gameDio.get<dynamic>(
-          RiotConstants.mmrPlayer(session.shard, session.puuid),
-        ),
+      DiagnosticResult(
+        'Rank',
+        ok: standing != null && !standing.isUnranked,
+        detail: standing == null
+            ? 'every source failed'
+            : standing.isUnranked
+            ? 'all sources answered; no rank found'
+            : 'tier ${standing.tier} · ${standing.rankedRating} RR',
       ),
     );
+    for (final RankAttempt attempt in attempts) {
+      results.add(
+        DiagnosticResult(
+          '   ${attempt.source}',
+          ok: attempt.ok,
+          detail: attempt.note,
+        ),
+      );
+    }
     results.add(
       await _probe(
         'Storefront',
@@ -88,12 +114,19 @@ class ConnectionDiagnostics {
       ),
     );
 
-    final String? act = await _deps.content.currentActUuid();
     results.add(
       DiagnosticResult(
         'Current act',
         ok: act != null,
         detail: act ?? 'unresolved — rank falls back to the last rated match',
+      ),
+    );
+
+    results.add(
+      DiagnosticResult(
+        'Client version',
+        ok: true,
+        detail: _deps.clientVersion.value,
       ),
     );
 
