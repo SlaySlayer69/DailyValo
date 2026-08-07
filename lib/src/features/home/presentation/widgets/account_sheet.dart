@@ -1,0 +1,197 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../app/providers.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_theme.dart';
+import '../../../../core/constants/storage_keys.dart';
+import '../../../../core/storage/local_store.dart';
+import '../../../../services/background/shop_sync_service.dart';
+import '../../../../services/notifications/notification_service.dart';
+
+/// Account and notification settings, reached from the header.
+///
+/// Kept as a sheet rather than a fifth tab — these are things you touch once.
+class AccountSheet extends ConsumerStatefulWidget {
+  const AccountSheet({super.key});
+
+  static Future<void> open(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: AppColors.backgroundElevated,
+      builder: (BuildContext _) => const AccountSheet(),
+    );
+  }
+
+  @override
+  ConsumerState<AccountSheet> createState() => _AccountSheetState();
+}
+
+class _AccountSheetState extends ConsumerState<AccountSheet> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final LocalStore store = ref.watch(localStoreProvider);
+    final AppMode mode = ref.watch(appModeProvider);
+
+    final bool shopNotifications = store.setting<bool>(
+      SettingKeys.shopNotificationsEnabled,
+      true,
+    );
+    final bool wishlistNotifications = store.setting<bool>(
+      SettingKeys.wishlistNotificationsEnabled,
+      true,
+    );
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.sm,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              'Settings',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            SwitchListTile.adaptive(
+              value: shopNotifications,
+              onChanged: (bool value) => _setSetting(
+                SettingKeys.shopNotificationsEnabled,
+                value,
+              ),
+              title: const Text('Daily shop notification'),
+              subtitle: const Text(
+                'Silent summary of your four offers at reset',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            SwitchListTile.adaptive(
+              value: wishlistNotifications,
+              onChanged: (bool value) => _setSetting(
+                SettingKeys.wishlistNotificationsEnabled,
+                value,
+              ),
+              title: const Text('Wishlist alert'),
+              subtitle: const Text(
+                'Alerts you when a wishlisted skin is in your shop',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+
+            const Divider(height: AppSpacing.xl),
+
+            ListTile(
+              onTap: _busy ? null : _runSyncNow,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.sync_rounded),
+              title: const Text('Check my shop now'),
+              subtitle: const Text(
+                'Runs the same check the background worker does',
+              ),
+              trailing: _busy
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+            ListTile(
+              onTap: _busy ? null : _sendTestNotification,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.notifications_active_outlined),
+              title: const Text('Send a test notification'),
+              subtitle: const Text(
+                'Confirms notifications are allowed on this device',
+              ),
+            ),
+
+            const Divider(height: AppSpacing.xl),
+
+            ListTile(
+              onTap: _busy ? null : _signOut,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: AppColors.danger,
+              ),
+              title: Text(
+                mode == AppMode.demo ? 'Leave demo mode' : 'Sign out',
+                style: const TextStyle(color: AppColors.danger),
+              ),
+              subtitle: Text(
+                mode == AppMode.demo
+                    ? 'Return to the sign-in screen'
+                    : 'Clears your saved Riot session from this device',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setSetting(String key, bool value) async {
+    await ref.read(localStoreProvider).putSetting(key, value);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _runSyncNow() async {
+    setState(() => _busy = true);
+    try {
+      final ShopSyncOutcome outcome = await ShopSyncService(
+        ref.read(appDependenciesProvider),
+      ).sync();
+      ref.invalidate(shopControllerProvider);
+      if (!mounted) return;
+      _toast(
+        outcome.shopChanged
+            ? 'Your shop rotated — notifications sent.'
+            : 'Your shop is already up to date.',
+      );
+    } on Object catch (e) {
+      if (mounted) _toast('Check failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    final NotificationService notifications = ref.read(
+      notificationServiceProvider,
+    );
+    final bool granted = await notifications.requestPermission();
+    if (!granted) {
+      if (mounted) {
+        _toast('Notifications are blocked for DailyValo in system settings.');
+      }
+      return;
+    }
+    await notifications.showWishlistHit(
+      matchedLabels: const <String>['Vandal: Prime'],
+    );
+    if (mounted) _toast('Test notification sent.');
+  }
+
+  Future<void> _signOut() async {
+    setState(() => _busy = true);
+    await ref.read(appModeProvider.notifier).signOut();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}

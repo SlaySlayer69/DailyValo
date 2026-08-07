@@ -1,0 +1,38 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Treat sloppiness as breakage in CI.
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # --- Disabled ------------------------------------------------------------
+    # Repositories and services take *named* constructor parameters for
+    # readability at the call site, but store them in private fields. An
+    # initialising formal would force callers to write `_store: store`, leaking
+    # the private name into the public API. The redirect in the initialiser
+    # list is the correct trade here.
+    prefer_initializing_formals: false
+
+    # --- Enabled beyond flutter_lints ----------------------------------------
+    always_declare_return_types: true
+    avoid_dynamic_calls: true
+    avoid_slow_async_io: true
+    cancel_subscriptions: true
+    close_sinks: true
+    directives_ordering: true
+    prefer_final_in_for_each: true
+    prefer_final_locals: true
+    require_trailing_commas: true
+    sort_child_properties_last: true
+    unawaited_futures: true
+    unnecessary_await_in_return: true
+    unnecessary_parenthesis: true
+    use_enums: true
+    use_super_parameters: true
