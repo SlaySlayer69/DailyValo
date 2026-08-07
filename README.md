@@ -27,6 +27,12 @@ balances. Tapping any skin opens a detail page with the full render, every
 colour variant, and each upgrade level labelled with what it unlocks (VFX,
 sound effects, animation, finisher, …).
 
+**Preview clips.** Riot publishes short MP4s for most levels and for chromas
+with unique VFX. Tapping a level plays its clip; a `PREVIEW` button on the
+artwork plays the clip for the selected variant, falling back to the base
+skin's when that variant has none. A still image cannot show you what a
+finisher does.
+
 ### Notifications
 
 Two notifications, two Android channels, deliberately different:
@@ -49,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 61 unit tests, no device needed
+flutter test                # 65 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -223,7 +229,7 @@ reason the password never needs storing.
 
 ## Testing
 
-61 unit tests, no device or network required:
+65 unit tests, no device or network required:
 
 ```
 test/
@@ -246,9 +252,6 @@ implementation detail — a refactor should not be able to change them silently.
 
 Deliberately out of scope for this pass, in rough priority order:
 
-* **Skin preview video.** The API exposes `streamedVideo` for levels and
-  chromas; the detail page flags which have one but does not play it. Playing
-  them needs `video_player` plus lifecycle handling.
 * **Bundles.** `FeaturedBundle` is parsed past, not surfaced.
 * **Accessory store.** Kingdom Credit offers are read into the wallet but have
   no tab.

@@ -181,6 +181,23 @@ class WeaponSkin {
   List<SkinLevel> get upgradeLevels =>
       levels.length <= 1 ? const <SkinLevel>[] : levels.sublist(1);
 
+  /// The first preview clip Riot publishes for this skin, across all levels.
+  ///
+  /// Used as the fallback when a chroma has no clip of its own — Riot only
+  /// films variants that have unique VFX, so most chromas have none, and
+  /// showing the base skin in motion beats showing nothing.
+  String? get previewVideoUrl {
+    for (final SkinLevel level in levels) {
+      if (level.hasVideo) return level.streamedVideo;
+    }
+    return null;
+  }
+
+  /// Whether anything on this skin can be previewed as video.
+  bool get hasAnyPreviewVideo =>
+      previewVideoUrl != null ||
+      chromas.any((SkinChroma c) => c.hasVideo);
+
   bool get hasChromas => chromas.length > 1;
 
   /// Standard-issue skins ("Vandal", "Classic") have no content tier and are

@@ -4,11 +4,14 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../content/data/models/weapon_skin.dart';
+import 'skin_video_sheet.dart';
 
 /// The skin's upgrade ladder — what each Radianite level actually unlocks.
 ///
 /// `levelItem` is the API's own classification (VFX, SoundEffects, Animation,
 /// Finisher, …), so this list is exact rather than a guess from the level name.
+/// Levels Riot publishes a clip for are tappable and open that clip: a still
+/// image cannot show you what an animation or finisher does.
 class LevelList extends StatelessWidget {
   const LevelList({required this.skin, required this.accent, super.key});
 
@@ -20,6 +23,8 @@ class LevelList extends StatelessWidget {
     final List<SkinLevel> levels = skin.levels;
     if (levels.isEmpty) return const SizedBox.shrink();
 
+    final bool anyPlayable = levels.any((SkinLevel l) => l.hasVideo);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -29,6 +34,13 @@ class LevelList extends StatelessWidget {
               ? 'No upgrade levels'
               : '${levels.length} levels',
         ),
+        if (anyPlayable) ...<Widget>[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Tap a level to watch its preview',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         const SizedBox(height: AppSpacing.md),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -44,6 +56,8 @@ class LevelList extends StatelessWidget {
                   level: levels[i],
                   index: i,
                   accent: accent,
+                  skinName: skin.displayName,
+                  isFirst: i == 0,
                   isLast: i == levels.length - 1,
                 ),
               ],
@@ -60,12 +74,16 @@ class _LevelRow extends StatelessWidget {
     required this.level,
     required this.index,
     required this.accent,
+    required this.skinName,
+    required this.isFirst,
     required this.isLast,
   });
 
   final SkinLevel level;
   final int index;
   final Color accent;
+  final String skinName;
+  final bool isFirst;
   final bool isLast;
 
   @override
@@ -73,7 +91,14 @@ class _LevelRow extends StatelessWidget {
     final TextTheme text = Theme.of(context).textTheme;
     final bool isBase = index == 0;
 
-    return Padding(
+    // Only the top and bottom rows get rounded corners, so the ink splash
+    // stays inside the card outline.
+    final BorderRadius inkRadius = BorderRadius.vertical(
+      top: Radius.circular(isFirst ? AppRadius.md : 0),
+      bottom: Radius.circular(isLast ? AppRadius.md : 0),
+    );
+
+    final Widget row = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.md,
@@ -116,15 +141,39 @@ class _LevelRow extends StatelessWidget {
             ),
           ),
           if (level.hasVideo)
-            Tooltip(
-              message: 'Riot publishes a preview clip for this level',
-              child: Icon(
-                Icons.play_circle_outline_rounded,
-                size: 18,
-                color: AppColors.textTertiary,
+            Container(
+              height: 32,
+              width: 32,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
               ),
-            ),
+              child: Icon(
+                Icons.play_arrow_rounded,
+                size: 19,
+                color: accent,
+              ),
+            )
+          else
+            // Keeps every row the same height whether or not it has a clip.
+            const SizedBox(height: 32, width: 32),
         ],
+      ),
+    );
+
+    if (!level.hasVideo) return row;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: inkRadius,
+        onTap: () => SkinVideoSheet.open(
+          context,
+          videoUrl: level.streamedVideo!,
+          title: 'Level ${index + 1} · ${level.upgradeLabel}',
+          subtitle: skinName,
+        ),
+        child: row,
       ),
     );
   }
