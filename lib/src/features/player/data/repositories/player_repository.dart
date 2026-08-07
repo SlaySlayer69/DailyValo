@@ -4,8 +4,10 @@ import '../../../../core/network/riot_session_manager.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../auth/data/models/riot_session.dart';
+import '../../../content/data/repositories/content_repository.dart';
 import '../../../store/data/datasources/demo_store_source.dart';
 import '../../../store/data/datasources/riot_store_api.dart';
+import '../../../store/data/models/competitive_standing.dart';
 import '../models/player_profile.dart';
 
 /// Builds the profile shown in the app header: Riot ID, rank, VP and RP.
@@ -14,15 +16,18 @@ class PlayerRepository {
     required RiotStoreApi api,
     required RiotSessionManager sessions,
     required LocalStore store,
+    required ContentRepository content,
     DemoStoreSource demo = const DemoStoreSource(),
   }) : _api = api,
        _sessions = sessions,
        _store = store,
+       _content = content,
        _demo = demo;
 
   final RiotStoreApi _api;
   final RiotSessionManager _sessions;
   final LocalStore _store;
+  final ContentRepository _content;
   final DemoStoreSource _demo;
 
   bool get _isDemoMode => _store.setting<bool>(SettingKeys.demoMode, false);
@@ -55,31 +60,35 @@ class PlayerRepository {
     final RiotSession? session = _sessions.session;
     if (session == null) throw const NotAuthenticatedException();
 
+    // The act uuid keys the MMR record; it is cached, so this is usually free.
+    final String? actUuid = await _content.currentActUuid();
+
     // Independent calls; run them together to keep header latency down.
     final results = await (
       _api.fetchWallet(shard: session.shard, puuid: session.puuid),
       _api.fetchCompetitiveStanding(
         shard: session.shard,
         puuid: session.puuid,
+        actUuid: actUuid,
       ),
     ).wait;
     final Wallet wallet = results.$1;
-    final standing = results.$2;
+    final CompetitiveStanding? standing = results.$2;
 
     return PlayerProfile(
       puuid: session.puuid,
       gameName: session.gameName,
       tagLine: session.tagLine,
       wallet: wallet,
-      competitiveTier: standing.tier,
-      rankedRating: standing.rankedRating,
+      competitiveTier: standing?.tier ?? 0,
+      rankedRating: standing?.rankedRating ?? 0,
+      rankKnown: standing != null,
       updatedAt: DateTime.now(),
     );
   }
 
   PlayerProfile _buildDemoProfile() {
-    final ({int rankedRating, int tier}) standing =
-        _demo.buildCompetitiveStanding();
+    final CompetitiveStanding standing = _demo.buildCompetitiveStanding();
     return PlayerProfile(
       puuid: 'demo-puuid',
       gameName: 'SlaySlayer',

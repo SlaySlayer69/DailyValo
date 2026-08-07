@@ -27,6 +27,10 @@ abstract final class CacheKeys {
   static const String contentCatalogFetchedAt = 'content.catalog.fetchedAt';
   static const String clientVersion = 'riot.clientVersion';
 
+  /// UUID of the act currently running — the key the MMR record is indexed by.
+  static const String currentActUuid = 'content.currentAct';
+  static const String currentActFetchedAt = 'content.currentAct.fetchedAt';
+
   /// Last storefront the background worker saw — used to detect a shop reset.
   static const String lastShopSnapshot = 'shop.lastSnapshot';
 

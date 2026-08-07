@@ -65,6 +65,10 @@ abstract final class RiotConstants {
   static String entitlementsByType(String shard, String puuid, String typeId) =>
       '${pdBase(shard)}/store/v1/entitlements/$puuid/$typeId';
 
+  /// Full MMR record: seasonal tiers plus the latest competitive update.
+  static String mmrPlayer(String shard, String puuid) =>
+      '${pdBase(shard)}/mmr/v1/players/$puuid';
+
   static String competitiveUpdates(String shard, String puuid) =>
       '${pdBase(shard)}/mmr/v1/players/$puuid/competitiveupdates'
       '?startIndex=0&endIndex=1&queue=competitive';
@@ -76,8 +80,11 @@ abstract final class RiotConstants {
   /// Wallet currency identifiers.
   static const String currencyValorantPoints =
       '85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741';
+  // Verified against valorant-api.com/v1/currencies. Getting this wrong is
+  // silent: the wallet endpoint simply has no such key, so the balance reads
+  // as a plausible 0 rather than failing.
   static const String currencyRadianitePoints =
-      'e59aa87c-4cbf-517a-5f4b-3ab21d55c0e6';
+      'e59aa87c-4cbf-517a-5983-6e81511be9b7';
   static const String currencyKingdomCredits =
       '85ca954a-41f2-ce94-9b45-8ca3dd39a00d';
 

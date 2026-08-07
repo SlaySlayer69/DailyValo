@@ -81,6 +81,38 @@ class ContentRepository {
     return catalog;
   }
 
+  /// UUID of the current act, cached for a day.
+  ///
+  /// Kept out of the catalogue blob deliberately: acts roll over on their own
+  /// schedule, and a user sitting on a fresh 24-hour catalogue cache should
+  /// still get a correct rank the day an act flips.
+  Future<String?> currentActUuid() async {
+    final String? cached = _store.readCachedString(CacheKeys.currentActUuid);
+    final DateTime? fetchedAt = DateTime.tryParse(
+      _store.readCachedString(CacheKeys.currentActFetchedAt) ?? '',
+    );
+    final bool fresh =
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < const Duration(hours: 24);
+    if (cached != null && cached.isNotEmpty && fresh) return cached;
+
+    try {
+      final String? uuid = await _client.fetchCurrentActUuid();
+      if (uuid != null && uuid.isNotEmpty) {
+        await _store.writeCachedString(CacheKeys.currentActUuid, uuid);
+        await _store.writeCachedString(
+          CacheKeys.currentActFetchedAt,
+          DateTime.now().toIso8601String(),
+        );
+        return uuid;
+      }
+    } on Object catch (e) {
+      Log.e('Content', 'Current act lookup failed', e);
+    }
+    // A stale value still beats none: acts run for weeks.
+    return cached;
+  }
+
   /// Refreshes the `X-Riot-ClientVersion` used by PD requests.
   ///
   /// Best-effort: a stale-but-plausible version still works for a while, and

@@ -111,6 +111,7 @@ class AppDependencies {
       api: storeApi,
       sessions: sessions,
       store: localStore,
+      content: content,
     );
 
     final NotificationService notifications = NotificationService();

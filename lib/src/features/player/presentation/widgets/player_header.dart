@@ -103,11 +103,13 @@ class _HeaderContent extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                _rankLabel(tier, profile.rankedRating),
+                _rankLabel(tier, profile.rankedRating, profile.rankKnown),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: text.bodySmall?.copyWith(
-                  color: tier?.displayColor ?? AppColors.textTertiary,
+                  color: profile.rankKnown
+                      ? (tier?.displayColor ?? AppColors.textTertiary)
+                      : AppColors.textTertiary,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.3,
                 ),
@@ -142,7 +144,10 @@ class _HeaderContent extends StatelessWidget {
     );
   }
 
-  static String _rankLabel(CompetitiveTier? tier, int rr) {
+  static String _rankLabel(CompetitiveTier? tier, int rr, bool known) {
+    // "Unranked" is a claim about the account; only make it when Riot actually
+    // told us so. A failed lookup says so instead.
+    if (!known) return 'Rank unavailable';
     if (tier == null || tier.isUnranked) return 'Unranked';
     return '${Formatters.titleCase(tier.tierName)} · $rr RR';
   }

@@ -55,7 +55,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 74 unit tests, no device needed
+flutter test                # 82 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -175,6 +175,15 @@ in a `StatefulWidget` that repaints only the four characters that changed.
 
 ## Security and Riot's APIs
 
+### App icon
+
+A DV monogram: grey D, red V, near-black where the two planes cross, on a dark
+radial ground. Ships as an adaptive icon (background + foreground + monochrome
+layers) plus legacy square and round PNGs for API 24–25. The glyph is
+constrained to a 48x44 box inside the 108 grid so every corner stays within the
+66dp keyline circle — otherwise round and squircle launcher masks slice the V.
+`tool/generate_app_icon.py` regenerates every density.
+
 ### What is stored, and where
 
 | Data | Where | Why |
@@ -239,7 +248,7 @@ afterwards.
 
 ## Testing
 
-74 unit tests, no device or network required:
+82 unit tests, no device or network required:
 
 ```
 test/
@@ -250,6 +259,8 @@ test/
 ├── notification_format_test.dart   Locks in the two notification body formats
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
+├── web_login_test.dart             Cookie-header parsing, redirect detection
+├── wallet_and_rank_test.dart       Currency UUIDs, unranked-vs-unknown
 └── support/fixtures.dart           Realistic API payloads
 ```
 

@@ -99,6 +99,38 @@ class ValorantApiClient {
     return out;
   }
 
+  /// UUID of the act running right now.
+  ///
+  /// Riot's MMR record indexes seasonal rank by act UUID, so without this the
+  /// only rank we can read is whatever the last competitive match left behind.
+  /// Returns null between acts, or if the payload shape ever changes — the
+  /// caller falls back rather than failing.
+  Future<String?> fetchCurrentActUuid() async {
+    final Response<dynamic> response = await _dio.get<dynamic>(
+      ValorantApiConstants.seasons,
+    );
+
+    final DateTime now = DateTime.now().toUtc();
+    for (final Map<String, dynamic> season in _dataList(response.data)) {
+      // Episodes also appear in this list; only acts key the MMR record.
+      final String type = season['type'] as String? ?? '';
+      if (!type.contains('Act')) continue;
+
+      final DateTime? start = DateTime.tryParse(
+        season['startTime'] as String? ?? '',
+      );
+      final DateTime? end = DateTime.tryParse(
+        season['endTime'] as String? ?? '',
+      );
+      if (start == null || end == null) continue;
+
+      if (!now.isBefore(start.toUtc()) && now.isBefore(end.toUtc())) {
+        return season['uuid'] as String?;
+      }
+    }
+    return null;
+  }
+
   /// The live `riotClientVersion` string PD endpoints expect.
   Future<String> fetchClientVersion() async {
     final Response<dynamic> response = await _dio.get<dynamic>(

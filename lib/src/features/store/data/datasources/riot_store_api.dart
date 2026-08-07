@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../../core/constants/riot_constants.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../player/data/models/player_profile.dart';
+import '../models/competitive_standing.dart';
 import '../models/storefront_snapshot.dart';
 import 'storefront_parser.dart';
 
@@ -98,11 +99,68 @@ class RiotStoreApi {
         .toSet();
   }
 
-  /// Current competitive tier and RR, from the most recent ranked update.
+  /// The player's current competitive tier and RR.
   ///
-  /// Returns `(0, 0)` when the player is unranked this act — the endpoint
-  /// simply returns an empty match list, which is not an error.
-  Future<({int tier, int rankedRating})> fetchCompetitiveStanding({
+  /// Returns null when it genuinely could not be determined, which is *not*
+  /// the same as being unranked — the previous version conflated the two and
+  /// silently rendered every failure as "Unranked".
+  ///
+  /// Three sources, in descending order of trustworthiness:
+  ///
+  /// 1. `QueueSkills.competitive.SeasonalInfoBySeasonID[act]` — the act's
+  ///    standing, which is what the in-game card shows. Needs [actUuid].
+  /// 2. `LatestCompetitiveUpdate` — correct unless the act just rolled over.
+  /// 3. `/competitiveupdates` — the last rated match, as a final fallback.
+  Future<CompetitiveStanding?> fetchCompetitiveStanding({
+    required String shard,
+    required String puuid,
+    String? actUuid,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        RiotConstants.mmrPlayer(shard, puuid),
+      );
+      final Map<String, dynamic> body = _asMap(response.data);
+
+      if (actUuid != null) {
+        final Map<String, dynamic> seasons = _asMap(
+          _asMap(
+            _asMap(body['QueueSkills'])['competitive'],
+          )['SeasonalInfoBySeasonID'],
+        );
+        final Map<String, dynamic> act = _asMap(seasons[actUuid]);
+        final int tier = (act['CompetitiveTier'] as num?)?.toInt() ?? 0;
+        if (tier > 0) {
+          return CompetitiveStanding(
+            tier: tier,
+            rankedRating: (act['RankedRating'] as num?)?.toInt() ?? 0,
+          );
+        }
+      }
+
+      final Map<String, dynamic> latest = _asMap(
+        body['LatestCompetitiveUpdate'],
+      );
+      final int latestTier =
+          (latest['TierAfterUpdate'] as num?)?.toInt() ?? 0;
+      if (latestTier > 0) {
+        return CompetitiveStanding(
+          tier: latestTier,
+          rankedRating:
+              (latest['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
+        );
+      }
+
+      // The record exists and simply has no rank in it: genuinely unranked.
+      if (body.isNotEmpty) return const CompetitiveStanding.unranked();
+    } on DioException catch (e) {
+      Log.e('Store', 'MMR record unavailable (${e.response?.statusCode})', e);
+    }
+
+    return _fetchStandingFromLastMatch(shard: shard, puuid: puuid);
+  }
+
+  Future<CompetitiveStanding?> _fetchStandingFromLastMatch({
     required String shard,
     required String puuid,
   }) async {
@@ -112,17 +170,19 @@ class RiotStoreApi {
       );
       final Object? matches = _asMap(response.data)['Matches'];
       if (matches is! List || matches.isEmpty) {
-        return (tier: 0, rankedRating: 0);
+        return const CompetitiveStanding.unranked();
       }
       final Map<String, dynamic> latest = _asMap(matches.first);
-      return (
+      return CompetitiveStanding(
         tier: (latest['TierAfterUpdate'] as num?)?.toInt() ?? 0,
-        rankedRating: (latest['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
+        rankedRating:
+            (latest['RankedRatingAfterUpdate'] as num?)?.toInt() ?? 0,
       );
     } on DioException catch (e) {
-      // Rank is decoration; never fail the header over it.
-      Log.e('Store', 'Competitive standing lookup failed', e);
-      return (tier: 0, rankedRating: 0);
+      // Rank is decoration; never fail the header over it. But say so, rather
+      // than claiming the player is unranked.
+      Log.e('Store', 'Competitive updates unavailable', e);
+      return null;
     }
   }
 
