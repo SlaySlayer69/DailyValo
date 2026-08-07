@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../../content/data/models/accessory_item.dart';
 import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/weapon_skin.dart';
@@ -30,6 +31,16 @@ class DemoStoreSource {
     final DateTime midnight = DateTime.utc(now.year, now.month, now.day)
         .add(const Duration(days: 1));
     return midnight.toLocal();
+  }
+
+  /// The accessory store rotates weekly, not daily — so its countdown has to be
+  /// visibly further out than the daily one, which is the whole reason it gets
+  /// its own timer in the UI.
+  static DateTime nextAccessoryReset([DateTime? from]) {
+    final DateTime midnight = nextShopReset(from).toUtc();
+    // Days until the next Wednesday 00:00 UTC, never zero.
+    final int ahead = (DateTime.wednesday - midnight.weekday + 7) % 7;
+    return midnight.add(Duration(days: ahead)).toLocal();
   }
 
   /// Typical VP price for each rarity, so the demo shop reads correctly.
@@ -81,6 +92,11 @@ class DemoStoreSource {
         ? _buildNightMarket(catalog, pool, Random(daySeed ~/ 14))
         : const <RawNightMarketOffer>[];
 
+    final List<RawAccessoryOffer> accessories = _buildAccessoryStore(
+      catalog,
+      Random(daySeed ~/ 7),
+    );
+
     return StorefrontSnapshot(
       dailyOffers: offers,
       dailyResetAt: nextShopReset(now),
@@ -88,8 +104,78 @@ class DemoStoreSource {
       nightMarketEndsAt: nightMarketActive
           ? nextShopReset(now).add(const Duration(days: 6))
           : null,
+      accessoryOffers: accessories,
+      accessoryResetAt: accessories.isEmpty ? null : nextAccessoryReset(now),
+      bundles: _buildBundles(catalog, now, Random(daySeed ~/ 7)),
       capturedAt: now,
     );
+  }
+
+  /// What each kind of accessory typically costs in Kingdom Credits.
+  static const Map<AccessoryKind, int> _creditsByKind = <AccessoryKind, int>{
+    AccessoryKind.spray: 325,
+    AccessoryKind.buddy: 475,
+    AccessoryKind.playerCard: 375,
+    AccessoryKind.playerTitle: 550,
+    AccessoryKind.unknown: 400,
+  };
+
+  /// Four weekly accessory offers, drawn from the real catalogue.
+  ///
+  /// The catalogue indexes each item under several uuids (item *and* level), so
+  /// the values are de-duplicated before picking — otherwise the same spray
+  /// could turn up twice in one store.
+  List<RawAccessoryOffer> _buildAccessoryStore(
+    ContentCatalog catalog,
+    Random random,
+  ) {
+    final Map<String, AccessoryItem> unique = <String, AccessoryItem>{};
+    for (final AccessoryItem item in catalog.accessories.values) {
+      unique[item.uuid] = item;
+    }
+    if (unique.isEmpty) return const <RawAccessoryOffer>[];
+
+    final List<AccessoryItem> pool = unique.values.toList(growable: false);
+    final Set<int> chosen = <int>{};
+    final int count = min(4, pool.length);
+    while (chosen.length < count) {
+      chosen.add(random.nextInt(pool.length));
+    }
+
+    return chosen.map((int i) {
+      final AccessoryItem item = pool[i];
+      return RawAccessoryOffer(
+        offerId: 'demo-accessory-${item.uuid}',
+        cost: _creditsByKind[item.kind] ?? 400,
+        rewardIds: <String>[item.uuid],
+      );
+    }).toList(growable: false);
+  }
+
+  /// One featured bundle, mid-run, at Riot's usual ~22% bundle discount.
+  List<RawBundleOffer> _buildBundles(
+    ContentCatalog catalog,
+    DateTime now,
+    Random random,
+  ) {
+    final List<BundleInfo> pool = catalog.bundles.values.toList(
+      growable: false,
+    );
+    if (pool.isEmpty) return const <RawBundleOffer>[];
+
+    final BundleInfo bundle = pool[random.nextInt(pool.length)];
+    const int base = 8700;
+    const int discounted = 6789;
+    return <RawBundleOffer>[
+      RawBundleOffer(
+        bundleUuid: bundle.uuid,
+        basePrice: base,
+        discountedPrice: discounted,
+        discountPercent: ((base - discounted) * 100 / base).round(),
+        itemCount: 5,
+        endsAt: now.add(const Duration(days: 9, hours: 4)),
+      ),
+    ];
   }
 
   List<RawNightMarketOffer> _buildNightMarket(

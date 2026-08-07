@@ -1,4 +1,5 @@
 import '../../../../core/errors/app_exception.dart';
+import 'accessory_item.dart';
 import 'content_tier.dart';
 import 'weapon_skin.dart';
 
@@ -15,6 +16,8 @@ class ContentCatalog {
     required this.competitiveTiers,
     required this.language,
     required this.fetchedAt,
+    this.accessories = const <String, AccessoryItem>{},
+    this.bundles = const <String, BundleInfo>{},
   }) : _byUuid = <String, WeaponSkin>{},
        _byOfferUuid = <String, WeaponSkin>{} {
     for (final WeaponSkin skin in skins) {
@@ -37,6 +40,13 @@ class ContentCatalog {
   /// Competitive ranks, keyed by Riot's numeric tier.
   final Map<int, CompetitiveTier> competitiveTiers;
 
+  /// Sprays, buddies, cards and titles, keyed by every uuid that can appear as
+  /// a store reward — item uuids *and* level uuids.
+  final Map<String, AccessoryItem> accessories;
+
+  /// Bundle content keyed by bundle uuid.
+  final Map<String, BundleInfo> bundles;
+
   final String language;
   final DateTime fetchedAt;
 
@@ -54,6 +64,10 @@ class ContentCatalog {
 
   CompetitiveTier competitiveTier(int tier) =>
       competitiveTiers[tier] ?? CompetitiveTier.unranked;
+
+  AccessoryItem? accessoryByUuid(String uuid) => accessories[uuid];
+
+  BundleInfo? bundleByUuid(String uuid) => bundles[uuid];
 
   /// Skins that can actually appear in a shop — i.e. excluding the standard
   /// issue weapons, which have no content tier and are never sold.
@@ -74,6 +88,13 @@ class ContentCatalog {
     'competitiveTiers': competitiveTiers.map(
       (int k, CompetitiveTier v) => MapEntry<String, dynamic>('$k', v.toJson()),
     ),
+    'accessories': accessories.map(
+      (String k, AccessoryItem v) =>
+          MapEntry<String, dynamic>(k, v.toJson()),
+    ),
+    'bundles': bundles.map(
+      (String k, BundleInfo v) => MapEntry<String, dynamic>(k, v.toJson()),
+    ),
   };
 
   factory ContentCatalog.fromJson(Map<String, dynamic> json) {
@@ -91,6 +112,11 @@ class ContentCatalog {
           .map(WeaponSkin.fromCacheJson)
           .toList(growable: false),
       tiers: _mapOf<ContentTier>(json['tiers'], ContentTier.fromJson),
+      accessories: _mapOf<AccessoryItem>(
+        json['accessories'],
+        AccessoryItem.fromCacheJson,
+      ),
+      bundles: _mapOf<BundleInfo>(json['bundles'], BundleInfo.fromJson),
       competitiveTiers:
           _mapOf<CompetitiveTier>(
             json['competitiveTiers'],

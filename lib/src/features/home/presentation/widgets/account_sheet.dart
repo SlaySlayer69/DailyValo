@@ -21,6 +21,11 @@ class AccountSheet extends ConsumerStatefulWidget {
       context: context,
       useSafeArea: true,
       backgroundColor: AppColors.backgroundElevated,
+      // Without this the sheet is capped at half the screen height, which cut
+      // off the last two rows — "Send a test notification" was clipped and
+      // "Sign out" was unreachable entirely.
+      isScrollControlled: true,
+      showDragHandle: true,
       builder: (BuildContext _) => const AccountSheet(),
     );
   }
@@ -47,10 +52,13 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     );
 
     return SafeArea(
-      child: Padding(
+      // The sheet sizes itself to the content, but a small screen or a large
+      // system font can still make the list taller than the viewport — so the
+      // body scrolls instead of overflowing.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
-          AppSpacing.sm,
+          0,
           AppSpacing.lg,
           AppSpacing.lg,
         ),

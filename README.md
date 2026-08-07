@@ -17,13 +17,13 @@ buzzes when something you are actually hunting for shows up.
 
 | Tab | What it does |
 | --- | --- |
-| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. |
+| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
 | **Wishlist** | Searchable picker over the full skin catalogue; entries in today's shop are flagged inline. |
 | **Collection** | Every skin you own, grouped and counted by rarity. |
 
-Everywhere: a persistent header with your Riot ID, competitive rank, and VP/RP
-balances. Tapping any skin opens a detail page with the full render, every
+Everywhere: a persistent header with your Riot ID, competitive rank, and your
+Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
 colour variant, and each upgrade level labelled with what it unlocks (VFX,
 sound effects, animation, finisher, …).
 
@@ -32,6 +32,14 @@ with unique VFX. Tapping a level plays its clip; a `PREVIEW` button on the
 artwork plays the clip for the selected variant, falling back to the base
 skin's when that variant has none. A still image cannot show you what a
 finisher does.
+
+**Three clocks, not one.** The shop tab runs three independent countdowns
+because Riot runs three independent schedules: the four daily skins roll over at
+00:00 UTC, the Accessory Store rotates weekly, and each Featured Bundle leaves
+on its own date. Sharing one timer would have shown the wrong number on two of
+the three sections, so each section carries its own — and each refetches the
+storefront when it reaches zero, rather than displaying `00:00:00` over stale
+offers.
 
 ### Notifications
 
@@ -55,7 +63,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 99 unit tests, no device needed
+flutter test                # 119 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -104,7 +112,8 @@ lib/
     │   ├── auth/                    RSO login, MFA, silent re-auth
     │   ├── content/                 valorant-api.com catalogue + cache
     │   ├── player/                  Riot ID, rank, wallet → header
-    │   ├── store/                   Storefront, night market, demo source
+    │   ├── store/                   Storefront, night market, accessories,
+    │   │                            bundles, demo source
     │   ├── wishlist/                Hive-backed wishlist + picker
     │   ├── collection/              Owned skins
     │   ├── skin_detail/             Artwork, chromas, upgrade levels
@@ -261,13 +270,16 @@ afterwards.
 
 ## Testing
 
-99 unit tests, no device or network required:
+119 unit tests, no device or network required:
 
 ```
 test/
 ├── storefront_parser_test.dart     Riot payload → snapshot, incl. malformed input
 ├── content_catalog_test.dart       UUID → skin resolution, cache round trip
 ├── shop_resolution_test.dart       Joining offers to names/owned/wishlist state
+├── accessories_and_bundles_test.dart
+│                                   Accessory/bundle parsing, resolution,
+│                                   separate reset clocks, cache round trip
 ├── wishlist_repository_test.dart   Hive persistence and shop matching
 ├── notification_format_test.dart   Locks in the two notification body formats
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
@@ -287,9 +299,12 @@ implementation detail — a refactor should not be able to change them silently.
 
 Deliberately out of scope for this pass, in rough priority order:
 
-* **Bundles.** `FeaturedBundle` is parsed past, not surfaced.
-* **Accessory store.** Kingdom Credit offers are read into the wallet but have
-  no tab.
+* **Bundle contents.** A bundle shows its key art, price, discount and item
+  count, but not the list of skins inside it — that needs a second lookup per
+  bundle against the catalogue's item references.
+* **Accessory ownership.** Owned sprays, buddies and cards are not flagged the
+  way owned skins are; the entitlements call for those item types is not wired
+  up yet.
 * **Localisation.** The UI is English-only; the *content* language is already
   wired through (`SettingKeys.language` → `valorant-api.com?language=`), so
   adding `flutter_localizations` would finish the job.
