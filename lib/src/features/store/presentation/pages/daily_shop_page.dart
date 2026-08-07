@@ -8,6 +8,8 @@ import '../../../../core/widgets/countdown.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 import '../../data/models/shop.dart';
+import '../widgets/accessory_card.dart';
+import '../widgets/bundle_card.dart';
 import '../widgets/skin_card.dart';
 
 /// Tab 1 — the four daily offers and the countdown to the next rotation.
@@ -107,10 +109,56 @@ class _ShopContent extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
+
+        if (shop.hasAccessories) ...<Widget>[
+          const SizedBox(height: AppSpacing.lg),
+          SectionHeader(
+            title: 'Accessories',
+            subtitle: '${shop.accessories.length} offers',
+            // Its own countdown: the accessory store rotates weekly, so it is
+            // usually days out while the daily shop is hours out.
+            trailing: shop.accessoryResetAt == null
+                ? null
+                : CountdownPill(
+                    target: shop.accessoryResetAt!,
+                    label: 'Resets in',
+                    icon: Icons.category_outlined,
+                    onElapsed: () =>
+                        ref.read(shopControllerProvider.notifier).refresh(),
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          for (final AccessoryOffer offer in shop.accessories) ...<Widget>[
+            AccessoryCard(offer: offer),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ],
+
+        if (shop.hasBundles) ...<Widget>[
+          const SizedBox(height: AppSpacing.lg),
+          SectionHeader(
+            title: 'Featured Bundles',
+            subtitle: shop.bundles.length == 1
+                ? shop.bundles.first.displayName
+                : '${shop.bundles.length} bundles',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          for (final BundleOffer bundle in shop.bundles) ...<Widget>[
+            BundleCard(
+              bundle: bundle,
+              onExpired: () =>
+                  ref.read(shopControllerProvider.notifier).refresh(),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+        ],
+
         const SizedBox(height: AppSpacing.sm),
         Center(
           child: Text(
-            'Prices in Valorant Points · Resets 00:00 UTC',
+            'Skins and bundles in Valorant Points · Accessories in Kingdom '
+            'Credits · Shop resets 00:00 UTC',
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),

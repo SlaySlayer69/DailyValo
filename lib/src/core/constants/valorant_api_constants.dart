@@ -18,6 +18,12 @@ abstract final class ValorantApiConstants {
 
   /// Acts and episodes. Used to find the act the MMR record is keyed by.
   static const String seasons = '$base/seasons';
+
+  // Accessory Store content.
+  static const String sprays = '$base/sprays';
+  static const String buddies = '$base/buddies';
+  static const String playerCards = '$base/playercards';
+  static const String playerTitles = '$base/playertitles';
   static const String version = '$base/version';
 
   /// Currency icons served from the same CDN, addressed by currency UUID.

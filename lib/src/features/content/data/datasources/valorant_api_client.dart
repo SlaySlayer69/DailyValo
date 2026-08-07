@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../core/constants/valorant_api_constants.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../models/accessory_item.dart';
 import '../models/content_tier.dart';
 import '../models/weapon_skin.dart';
 
@@ -105,6 +106,111 @@ class ValorantApiClient {
   /// only rank we can read is whatever the last competitive match left behind.
   /// Returns null between acts, or if the payload shape ever changes — the
   /// caller falls back rather than failing.
+  /// Sprays, gun buddies, player cards and titles, in one index.
+  ///
+  /// Keyed by **every** uuid that can appear as a store reward: the item's own
+  /// uuid and each of its level uuids. Buddies and sprays are sold by level,
+  /// and a buddy's level uuid is not its item uuid — indexing only the latter
+  /// leaves the Accessory Store showing blank rows.
+  Future<Map<String, AccessoryItem>> fetchAccessories() async {
+    final List<Future<Response<dynamic>>> requests =
+        <Future<Response<dynamic>>>[
+          _get(ValorantApiConstants.sprays),
+          _get(ValorantApiConstants.buddies),
+          _get(ValorantApiConstants.playerCards),
+          _get(ValorantApiConstants.playerTitles),
+        ];
+    final List<Response<dynamic>> responses = await Future.wait(requests);
+
+    final Map<String, AccessoryItem> index = <String, AccessoryItem>{};
+
+    void add(AccessoryItem item, Map<String, dynamic> raw) {
+      if (item.uuid.isEmpty) return;
+      index[item.uuid] = item;
+      final Object? levels = raw['levels'];
+      if (levels is! List) return;
+      for (final Object? level in levels) {
+        if (level is! Map<String, dynamic>) continue;
+        final String? levelUuid = level['uuid'] as String?;
+        if (levelUuid != null && levelUuid.isNotEmpty) {
+          index.putIfAbsent(levelUuid, () => item);
+        }
+      }
+    }
+
+    for (final Map<String, dynamic> json in _dataList(responses[0].data)) {
+      add(
+        AccessoryItem(
+          uuid: json['uuid'] as String? ?? '',
+          displayName: json['displayName'] as String? ?? 'Spray',
+          kind: AccessoryKind.spray,
+          displayIcon:
+              json['fullTransparentIcon'] as String? ??
+              json['displayIcon'] as String?,
+        ),
+        json,
+      );
+    }
+
+    for (final Map<String, dynamic> json in _dataList(responses[1].data)) {
+      add(
+        AccessoryItem(
+          uuid: json['uuid'] as String? ?? '',
+          displayName: json['displayName'] as String? ?? 'Gun Buddy',
+          kind: AccessoryKind.buddy,
+          displayIcon: json['displayIcon'] as String?,
+        ),
+        json,
+      );
+    }
+
+    for (final Map<String, dynamic> json in _dataList(responses[2].data)) {
+      add(
+        AccessoryItem(
+          uuid: json['uuid'] as String? ?? '',
+          displayName: json['displayName'] as String? ?? 'Player Card',
+          kind: AccessoryKind.playerCard,
+          displayIcon: json['displayIcon'] as String?,
+          wideArt: json['wideArt'] as String?,
+        ),
+        json,
+      );
+    }
+
+    for (final Map<String, dynamic> json in _dataList(responses[3].data)) {
+      add(
+        AccessoryItem(
+          uuid: json['uuid'] as String? ?? '',
+          displayName: json['displayName'] as String? ?? 'Title',
+          kind: AccessoryKind.playerTitle,
+          titleText: json['titleText'] as String?,
+        ),
+        json,
+      );
+    }
+
+    return index;
+  }
+
+  /// Static content for every bundle Riot has shipped, keyed by uuid.
+  Future<Map<String, BundleInfo>> fetchBundles() async {
+    final Response<dynamic> response = await _get(
+      ValorantApiConstants.bundles,
+    );
+
+    final Map<String, BundleInfo> bundles = <String, BundleInfo>{};
+    for (final Map<String, dynamic> json in _dataList(response.data)) {
+      final BundleInfo bundle = BundleInfo.fromJson(json);
+      if (bundle.uuid.isNotEmpty) bundles[bundle.uuid] = bundle;
+    }
+    return bundles;
+  }
+
+  Future<Response<dynamic>> _get(String url) => _dio.get<dynamic>(
+    url,
+    queryParameters: <String, dynamic>{'language': language},
+  );
+
   /// Every act uuid, newest first.
   ///
   /// The MMR record is keyed by season uuid, and betting on a single "current"

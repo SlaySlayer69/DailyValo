@@ -37,6 +37,12 @@ abstract final class StorefrontParser {
     final int? bonusRemaining =
         (bonus['BonusStoreRemainingDurationInSeconds'] as num?)?.toInt();
 
+    final Map<String, dynamic> accessory = _asMap(body['AccessoryStore']);
+    final List<RawAccessoryOffer> accessories = _parseAccessories(accessory);
+    final int? accessoryRemaining =
+        (accessory['AccessoryStoreRemainingDurationInSeconds'] as num?)
+            ?.toInt();
+
     return StorefrontSnapshot(
       dailyOffers: dailyOffers,
       dailyResetAt: timestamp.add(Duration(seconds: dailyRemaining)),
@@ -44,8 +50,103 @@ abstract final class StorefrontParser {
       nightMarketEndsAt: (nightMarket.isEmpty || bonusRemaining == null)
           ? null
           : timestamp.add(Duration(seconds: bonusRemaining)),
+      accessoryOffers: accessories,
+      // The accessory store rotates weekly, on its own schedule — never assume
+      // it shares the daily reset.
+      accessoryResetAt: accessoryRemaining == null
+          ? null
+          : timestamp.add(Duration(seconds: accessoryRemaining)),
+      bundles: _parseBundles(body, timestamp),
       capturedAt: timestamp,
     );
+  }
+
+  static List<RawAccessoryOffer> _parseAccessories(
+    Map<String, dynamic> accessory,
+  ) {
+    final Object? offers = accessory['AccessoryStoreOffers'];
+    if (offers is! List) return const <RawAccessoryOffer>[];
+
+    final List<RawAccessoryOffer> out = <RawAccessoryOffer>[];
+    for (final Object? raw in offers) {
+      final Map<String, dynamic> entry = _asMap(raw);
+      final Map<String, dynamic> offer = _asMap(entry['Offer']);
+      final String? offerId = offer['OfferID'] as String?;
+      if (offerId == null) continue;
+
+      final List<String> rewards = <String>[];
+      final Object? rawRewards = offer['Rewards'];
+      if (rawRewards is List) {
+        for (final Object? reward in rawRewards) {
+          final String? itemId = _asMap(reward)['ItemID'] as String?;
+          if (itemId != null && itemId.isNotEmpty) rewards.add(itemId);
+        }
+      }
+
+      out.add(
+        RawAccessoryOffer(
+          offerId: offerId,
+          cost: kingdomCreditCost(offer['Cost']),
+          rewardIds: rewards,
+          contractId: entry['ContractID'] as String?,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static List<RawBundleOffer> _parseBundles(
+    Map<String, dynamic> body,
+    DateTime now,
+  ) {
+    final Map<String, dynamic> featured = _asMap(body['FeaturedBundle']);
+    final Object? bundles = featured['Bundles'];
+    if (bundles is! List) return const <RawBundleOffer>[];
+
+    final List<RawBundleOffer> out = <RawBundleOffer>[];
+    for (final Object? raw in bundles) {
+      final Map<String, dynamic> bundle = _asMap(raw);
+
+      // `DataAssetID` is what matches valorant-api's bundle content; `ID` is
+      // the storefront's own instance id and resolves to nothing.
+      final String? uuid =
+          bundle['DataAssetID'] as String? ?? bundle['ID'] as String?;
+      if (uuid == null) continue;
+
+      final Object? items = bundle['Items'];
+      final int seconds =
+          (bundle['DurationRemainingInSeconds'] as num?)?.toInt() ??
+          (featured['BundleRemainingDurationInSeconds'] as num?)?.toInt() ??
+          0;
+
+      // Riot sends the discount as a fraction (0.2197); the UI wants percent.
+      final num? fraction = bundle['TotalDiscountPercent'] as num?;
+
+      out.add(
+        RawBundleOffer(
+          bundleUuid: uuid,
+          basePrice: valorantPointCost(bundle['TotalBaseCost']),
+          discountedPrice: valorantPointCost(bundle['TotalDiscountedCost']),
+          discountPercent: fraction == null
+              ? 0
+              : (fraction * 100).round().clamp(0, 100),
+          itemCount: items is List ? items.length : 0,
+          endsAt: now.add(Duration(seconds: seconds)),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Accessories are billed in Kingdom Credits, not Valorant Points.
+  static int kingdomCreditCost(Object? cost) {
+    final Map<String, dynamic> map = _asMap(cost);
+    final Object? kc = map[RiotConstants.currencyKingdomCredits];
+    if (kc is num) return kc.toInt();
+    if (map.length == 1 && map.values.first is num) {
+      return (map.values.first as num).toInt();
+    }
+    return 0;
   }
 
   static List<RawOffer> _parseDailyOffers(Map<String, dynamic> body) {

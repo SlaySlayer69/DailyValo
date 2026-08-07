@@ -1,3 +1,4 @@
+import '../../../content/data/models/accessory_item.dart';
 import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/weapon_skin.dart';
@@ -66,6 +67,68 @@ class NightMarketDeal {
   int get savings => basePrice - price;
 }
 
+/// A weekly Accessory Store entry with its items resolved.
+class AccessoryOffer {
+  const AccessoryOffer({
+    required this.offerId,
+    required this.items,
+    required this.price,
+  });
+
+  final String offerId;
+
+  /// Usually one item; occasionally a small bundle of them.
+  final List<AccessoryItem> items;
+
+  /// Price in Kingdom Credits.
+  final int price;
+
+  AccessoryItem get primary => items.first;
+
+  /// `Spray` / `Gun Buddy` / `Player Card` / `Title`, or a count when the offer
+  /// grants several things at once.
+  String get subtitle =>
+      items.length == 1 ? primary.kind.label : '${items.length} items';
+}
+
+/// A Featured Bundle with its artwork and name resolved.
+class BundleOffer {
+  const BundleOffer({
+    required this.uuid,
+    required this.basePrice,
+    required this.price,
+    required this.discountPercent,
+    required this.itemCount,
+    required this.endsAt,
+    this.info,
+  });
+
+  final String uuid;
+  final int basePrice;
+  final int price;
+  final int discountPercent;
+  final int itemCount;
+
+  /// When the bundle leaves the shop. Bundles run for a week or two, on their
+  /// own schedule — nothing to do with the daily reset.
+  final DateTime endsAt;
+
+  /// Null when the catalogue does not know this bundle yet, which happens for
+  /// a day or two after Riot ships a new one.
+  final BundleInfo? info;
+
+  String get displayName => info?.displayName ?? 'Featured Bundle';
+
+  int get savings => basePrice - price;
+
+  bool get isDiscounted => price < basePrice;
+
+  Duration get timeRemaining {
+    final Duration d = endsAt.difference(DateTime.now());
+    return d.isNegative ? Duration.zero : d;
+  }
+}
+
 /// The fully resolved store, ready to render.
 class Shop {
   const Shop({
@@ -74,6 +137,9 @@ class Shop {
     required this.nightMarket,
     required this.nightMarketEndsAt,
     required this.capturedAt,
+    this.accessories = const <AccessoryOffer>[],
+    this.accessoryResetAt,
+    this.bundles = const <BundleOffer>[],
   });
 
   final List<ShopOffer> dailyOffers;
@@ -83,9 +149,21 @@ class Shop {
   final List<NightMarketDeal> nightMarket;
   final DateTime? nightMarketEndsAt;
 
+  /// Weekly Accessory Store offers, priced in Kingdom Credits.
+  final List<AccessoryOffer> accessories;
+
+  /// The accessory store rotates weekly, on its own clock — it needs a separate
+  /// countdown from the daily shop rather than sharing one.
+  final DateTime? accessoryResetAt;
+
+  /// Featured Bundles, each with its own end time.
+  final List<BundleOffer> bundles;
+
   final DateTime capturedAt;
 
   bool get hasNightMarket => nightMarket.isNotEmpty;
+  bool get hasAccessories => accessories.isNotEmpty;
+  bool get hasBundles => bundles.isNotEmpty;
 
   Duration get timeUntilReset {
     final Duration d = dailyResetAt.difference(DateTime.now());
@@ -149,11 +227,46 @@ class Shop {
       );
     }
 
+    // --- Accessory Store ---------------------------------------------------
+    final List<AccessoryOffer> accessories = <AccessoryOffer>[];
+    for (final RawAccessoryOffer raw in snapshot.accessoryOffers) {
+      final List<AccessoryItem> items = raw.rewardIds
+          .map(catalog.accessoryByUuid)
+          .whereType<AccessoryItem>()
+          .toList(growable: false);
+      // An offer whose rewards are all unknown would render as a blank row.
+      if (items.isEmpty) continue;
+      accessories.add(
+        AccessoryOffer(offerId: raw.offerId, items: items, price: raw.cost),
+      );
+    }
+
+    // --- Featured Bundles --------------------------------------------------
+    // Bundles are kept even when the catalogue does not know them yet: the
+    // price and countdown are still useful, and a new bundle is exactly when
+    // someone opens the app.
+    final List<BundleOffer> bundles = snapshot.bundles
+        .map(
+          (RawBundleOffer raw) => BundleOffer(
+            uuid: raw.bundleUuid,
+            basePrice: raw.basePrice,
+            price: raw.discountedPrice,
+            discountPercent: raw.discountPercent,
+            itemCount: raw.itemCount,
+            endsAt: raw.endsAt,
+            info: catalog.bundleByUuid(raw.bundleUuid),
+          ),
+        )
+        .toList(growable: false);
+
     return Shop(
       dailyOffers: daily,
       dailyResetAt: snapshot.dailyResetAt,
       nightMarket: market,
       nightMarketEndsAt: snapshot.nightMarketEndsAt,
+      accessories: accessories,
+      accessoryResetAt: snapshot.accessoryResetAt,
+      bundles: bundles,
       capturedAt: snapshot.capturedAt,
     );
   }

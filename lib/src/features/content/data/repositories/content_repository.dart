@@ -5,6 +5,7 @@ import '../../../../core/network/client_version.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../core/utils/logger.dart';
 import '../datasources/valorant_api_client.dart';
+import '../models/accessory_item.dart';
 import '../models/content_catalog.dart';
 import '../models/content_tier.dart';
 import '../models/weapon_skin.dart';
@@ -60,24 +61,33 @@ class ContentRepository {
   Future<ContentCatalog> _refresh() async {
     Log.d('Content', 'Fetching catalogue (${_client.language})');
 
-    // Three independent requests — no reason to serialise them.
+    // Independent requests — no reason to serialise them.
     final List<Object> results = await Future.wait<Object>(<Future<Object>>[
       _client.fetchSkins(),
       _client.fetchContentTiers(),
       _client.fetchCompetitiveTiers(),
+      _client.fetchAccessories(),
+      _client.fetchBundles(),
     ]);
 
     final ContentCatalog catalog = ContentCatalog(
       skins: results[0] as List<WeaponSkin>,
       tiers: results[1] as Map<String, ContentTier>,
       competitiveTiers: results[2] as Map<int, CompetitiveTier>,
+      accessories: results[3] as Map<String, AccessoryItem>,
+      bundles: results[4] as Map<String, BundleInfo>,
       language: _client.language,
       fetchedAt: DateTime.now(),
     );
 
     _memory = catalog;
     await _store.writeCached(CacheKeys.contentCatalog, catalog.toJson());
-    Log.d('Content', 'Catalogue ready: ${catalog.skins.length} skins');
+    Log.d(
+      'Content',
+      'Catalogue ready: ${catalog.skins.length} skins, '
+          '${catalog.accessories.length} accessory ids, '
+          '${catalog.bundles.length} bundles',
+    );
     return catalog;
   }
 

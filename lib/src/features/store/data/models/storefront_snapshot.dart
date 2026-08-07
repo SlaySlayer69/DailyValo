@@ -72,6 +72,94 @@ class RawNightMarketOffer {
       );
 }
 
+/// One weekly Accessory Store entry: sprays, buddies, cards and titles, priced
+/// in Kingdom Credits rather than Valorant Points.
+class RawAccessoryOffer {
+  const RawAccessoryOffer({
+    required this.offerId,
+    required this.cost,
+    required this.rewardIds,
+    this.contractId,
+  });
+
+  final String offerId;
+
+  /// Price in Kingdom Credits.
+  final int cost;
+
+  /// Item uuids granted by the offer — usually one, occasionally several.
+  /// These may be *level* uuids for buddies and sprays.
+  final List<String> rewardIds;
+
+  final String? contractId;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'offerId': offerId,
+    'cost': cost,
+    'rewardIds': rewardIds,
+    'contractId': contractId,
+  };
+
+  factory RawAccessoryOffer.fromJson(Map<String, dynamic> json) =>
+      RawAccessoryOffer(
+        offerId: json['offerId'] as String? ?? '',
+        cost: (json['cost'] as num?)?.toInt() ?? 0,
+        rewardIds:
+            (json['rewardIds'] as List<dynamic>?)
+                ?.whereType<String>()
+                .toList(growable: false) ??
+            const <String>[],
+        contractId: json['contractId'] as String?,
+      );
+}
+
+/// A Featured Bundle as the storefront describes it.
+class RawBundleOffer {
+  const RawBundleOffer({
+    required this.bundleUuid,
+    required this.basePrice,
+    required this.discountedPrice,
+    required this.discountPercent,
+    required this.itemCount,
+    required this.endsAt,
+  });
+
+  /// `DataAssetID` — the uuid that matches valorant-api's bundle content.
+  final String bundleUuid;
+
+  final int basePrice;
+  final int discountedPrice;
+
+  /// 0–100. Riot sends a fraction; this is already scaled.
+  final int discountPercent;
+
+  final int itemCount;
+
+  /// Absolute time the bundle leaves the shop.
+  final DateTime endsAt;
+
+  int get savings => basePrice - discountedPrice;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'bundleUuid': bundleUuid,
+    'basePrice': basePrice,
+    'discountedPrice': discountedPrice,
+    'discountPercent': discountPercent,
+    'itemCount': itemCount,
+    'endsAt': endsAt.toIso8601String(),
+  };
+
+  factory RawBundleOffer.fromJson(Map<String, dynamic> json) => RawBundleOffer(
+    bundleUuid: json['bundleUuid'] as String? ?? '',
+    basePrice: (json['basePrice'] as num?)?.toInt() ?? 0,
+    discountedPrice: (json['discountedPrice'] as num?)?.toInt() ?? 0,
+    discountPercent: (json['discountPercent'] as num?)?.toInt() ?? 0,
+    itemCount: (json['itemCount'] as num?)?.toInt() ?? 0,
+    endsAt:
+        DateTime.tryParse(json['endsAt'] as String? ?? '') ?? DateTime.now(),
+  );
+}
+
 /// A point-in-time capture of the player's store.
 class StorefrontSnapshot {
   const StorefrontSnapshot({
@@ -80,6 +168,9 @@ class StorefrontSnapshot {
     required this.nightMarketOffers,
     required this.nightMarketEndsAt,
     required this.capturedAt,
+    this.accessoryOffers = const <RawAccessoryOffer>[],
+    this.accessoryResetAt,
+    this.bundles = const <RawBundleOffer>[],
   });
 
   final List<RawOffer> dailyOffers;
@@ -94,9 +185,21 @@ class StorefrontSnapshot {
 
   final DateTime? nightMarketEndsAt;
 
+  /// Weekly Accessory Store. Empty when Riot returns no accessory panel.
+  final List<RawAccessoryOffer> accessoryOffers;
+
+  /// The accessory store runs on its own weekly cadence, so it needs its own
+  /// countdown — it does not roll over with the daily shop.
+  final DateTime? accessoryResetAt;
+
+  /// Featured Bundles, each with its own end time.
+  final List<RawBundleOffer> bundles;
+
   final DateTime capturedAt;
 
   bool get hasNightMarket => nightMarketOffers.isNotEmpty;
+  bool get hasAccessories => accessoryOffers.isNotEmpty;
+  bool get hasBundles => bundles.isNotEmpty;
 
   Duration get timeUntilReset {
     final Duration d = dailyResetAt.difference(DateTime.now());
@@ -120,6 +223,11 @@ class StorefrontSnapshot {
       dailyOffers.map((RawOffer o) => o.offerId).toSet();
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+    'accessoryOffers': accessoryOffers
+        .map((RawAccessoryOffer o) => o.toJson())
+        .toList(),
+    'accessoryResetAt': accessoryResetAt?.toIso8601String(),
+    'bundles': bundles.map((RawBundleOffer b) => b.toJson()).toList(),
     'dailyOffers': dailyOffers.map((RawOffer o) => o.toJson()).toList(),
     'dailyResetAt': dailyResetAt.toIso8601String(),
     'nightMarketOffers': nightMarketOffers
@@ -143,6 +251,15 @@ class StorefrontSnapshot {
       nightMarketEndsAt: DateTime.tryParse(
         json['nightMarketEndsAt'] as String? ?? '',
       ),
+      accessoryOffers: _list(json['accessoryOffers'])
+          .map(RawAccessoryOffer.fromJson)
+          .toList(growable: false),
+      accessoryResetAt: DateTime.tryParse(
+        json['accessoryResetAt'] as String? ?? '',
+      ),
+      bundles: _list(json['bundles'])
+          .map(RawBundleOffer.fromJson)
+          .toList(growable: false),
       capturedAt:
           DateTime.tryParse(json['capturedAt'] as String? ?? '') ??
           DateTime.now(),

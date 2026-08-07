@@ -1,3 +1,4 @@
+import 'package:dailyvalo/src/features/content/data/models/accessory_item.dart';
 import 'package:dailyvalo/src/features/content/data/models/content_catalog.dart';
 import 'package:dailyvalo/src/features/content/data/models/content_tier.dart';
 import 'package:dailyvalo/src/features/content/data/models/weapon_skin.dart';
@@ -165,6 +166,70 @@ abstract final class Fixtures {
     weaponCategory: 'Rifle',
   );
 
+  // --- Accessory store ----------------------------------------------------
+  static const String sprayUuid = 'e1a2b3c4-1111-4222-8333-444455556666';
+  static const String buddyUuid = 'f2b3c4d5-2222-4333-8444-555566667777';
+
+  /// Buddies are granted by their *level* uuid, which is not the buddy uuid —
+  /// the catalogue has to index both or the offer resolves to nothing.
+  static const String buddyLevelUuid = 'f2b3c4d5-2222-4333-8444-555566667778';
+  static const String playerCardUuid = 'a3c4d5e6-3333-4444-8555-666677778888';
+  static const String playerTitleUuid = 'b4d5e6f7-4444-4555-8666-777788889999';
+
+  static const AccessoryItem spray = AccessoryItem(
+    uuid: sprayUuid,
+    displayName: 'Good Game Spray',
+    kind: AccessoryKind.spray,
+    displayIcon: 'https://media.valorant-api.com/sprays/gg.png',
+  );
+
+  static const AccessoryItem buddy = AccessoryItem(
+    uuid: buddyUuid,
+    displayName: 'Polyfrog Buddy',
+    kind: AccessoryKind.buddy,
+    displayIcon: 'https://media.valorant-api.com/buddies/polyfrog.png',
+  );
+
+  static const AccessoryItem playerCard = AccessoryItem(
+    uuid: playerCardUuid,
+    displayName: 'Neptune Card',
+    kind: AccessoryKind.playerCard,
+    displayIcon: 'https://media.valorant-api.com/cards/neptune-small.png',
+    wideArt: 'https://media.valorant-api.com/cards/neptune-wide.png',
+  );
+
+  static const AccessoryItem playerTitle = AccessoryItem(
+    uuid: playerTitleUuid,
+    displayName: 'Legend Title',
+    kind: AccessoryKind.playerTitle,
+    titleText: 'Legend',
+  );
+
+  /// Keyed the way `ValorantApiClient.fetchAccessories` keys it: every uuid
+  /// that can appear as a reward, including buddy level uuids.
+  static Map<String, AccessoryItem> accessories() => <String, AccessoryItem>{
+    sprayUuid: spray,
+    buddyUuid: buddy,
+    buddyLevelUuid: buddy,
+    playerCardUuid: playerCard,
+    playerTitleUuid: playerTitle,
+  };
+
+  // --- Featured bundles ---------------------------------------------------
+  static const String protocolBundleUuid =
+      'c5e6f708-5555-4666-8777-88889999aaaa';
+
+  static const BundleInfo protocolBundle = BundleInfo(
+    uuid: protocolBundleUuid,
+    displayName: 'Protocol 781-A',
+    displayIcon: 'https://media.valorant-api.com/bundles/protocol.png',
+    verticalPromoImage: 'https://media.valorant-api.com/bundles/protocol-v.png',
+  );
+
+  static Map<String, BundleInfo> bundles() => <String, BundleInfo>{
+    protocolBundleUuid: protocolBundle,
+  };
+
   static ContentCatalog catalog() => ContentCatalog(
     skins: <WeaponSkin>[
       primeVandal(),
@@ -176,6 +241,8 @@ abstract final class Fixtures {
       tierUltraUuid: ultra,
       tierPremiumUuid: premium,
     },
+    accessories: accessories(),
+    bundles: bundles(),
     competitiveTiers: <int, CompetitiveTier>{
       0: CompetitiveTier.unranked,
       22: const CompetitiveTier(
@@ -194,6 +261,8 @@ abstract final class Fixtures {
   /// A storefront body in the shape Riot's `/store/v2` and `/store/v3` return.
   static Map<String, dynamic> storefrontJson({
     bool withNightMarket = true,
+    bool withAccessories = true,
+    bool withBundles = true,
   }) => <String, dynamic>{
     'SkinsPanelLayout': <String, dynamic>{
       'SingleItemOffers': <String>[
@@ -223,7 +292,68 @@ abstract final class Fixtures {
         ],
         'BonusStoreRemainingDurationInSeconds': 172800,
       },
+    if (withAccessories)
+      'AccessoryStore': <String, dynamic>{
+        'AccessoryStoreOffers': <Map<String, dynamic>>[
+          _accessoryOffer('acc-1', 325, <String>[sprayUuid]),
+          // A buddy arrives as its level uuid, not its item uuid.
+          _accessoryOffer('acc-2', 475, <String>[buddyLevelUuid]),
+          _accessoryOffer('acc-3', 375, <String>[playerCardUuid]),
+          _accessoryOffer('acc-4', 550, <String>[playerTitleUuid]),
+          // Riot occasionally ships something the mirror has not indexed.
+          _accessoryOffer('acc-5', 400, <String>['unknown-reward-uuid']),
+        ],
+        // A week out — deliberately far past the daily reset.
+        'AccessoryStoreRemainingDurationInSeconds': 604800,
+      },
+    if (withBundles)
+      'FeaturedBundle': <String, dynamic>{
+        'Bundle': <String, dynamic>{'DataAssetID': protocolBundleUuid},
+        'Bundles': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'ID': 'storefront-instance-id',
+            'DataAssetID': protocolBundleUuid,
+            'CurrencyID': _vpUuid,
+            'Items': <Map<String, dynamic>>[
+              <String, dynamic>{'Item': <String, dynamic>{}},
+              <String, dynamic>{'Item': <String, dynamic>{}},
+              <String, dynamic>{'Item': <String, dynamic>{}},
+            ],
+            'DurationRemainingInSeconds': 259200,
+            'TotalBaseCost': <String, dynamic>{_vpUuid: 8700},
+            'TotalDiscountedCost': <String, dynamic>{_vpUuid: 6789},
+            'TotalDiscountPercent': 0.2197,
+            'WholesaleOnly': false,
+          },
+        ],
+        'BundleRemainingDurationInSeconds': 259200,
+      },
   };
+
+  static Map<String, dynamic> _accessoryOffer(
+    String offerId,
+    int credits,
+    List<String> rewardIds,
+  ) => <String, dynamic>{
+    'Offer': <String, dynamic>{
+      'OfferID': offerId,
+      'IsDirectPurchase': false,
+      'Cost': <String, dynamic>{_kcUuid: credits},
+      'Rewards': rewardIds
+          .map(
+            (String id) => <String, dynamic>{
+              'ItemTypeID': 'ignored-by-the-parser',
+              'ItemID': id,
+              'Quantity': 1,
+            },
+          )
+          .toList(),
+    },
+    'ContractID': 'y1s1-accessory-contract',
+  };
+
+  static const String _vpUuid = '85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741';
+  static const String _kcUuid = '85ca954a-41f2-ce94-9b45-8ca3dd39a00d';
 
   static Map<String, dynamic> _storeOffer(String offerId, int vp) =>
       <String, dynamic>{
