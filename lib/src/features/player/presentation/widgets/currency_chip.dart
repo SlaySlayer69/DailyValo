@@ -81,10 +81,10 @@ class CurrencyAmount extends StatelessWidget {
 /// Text-only, deliberately. Riot serves no icon for Radianite Points (that
 /// currency's `displayicon.png` 404s), so an icon here meant VP got real art
 /// while RP got a generic placeholder glyph — visually inconsistent and
-/// meaningless. `VP` and `RP` are the labels players already use in game, and
-/// two short words read faster in a cramped header than two small images.
-/// Prices on cards keep their VP icon, where there is room and only one
-/// currency is ever shown.
+/// meaningless. `VP`, `RP` and `KC` are the labels players already use in game,
+/// and three short words read faster in a cramped header than three small
+/// images. Prices on cards keep their currency icon, where there is room and
+/// only one currency is ever shown.
 class BalanceChip extends StatelessWidget {
   const BalanceChip({
     required this.amount,
@@ -111,6 +111,9 @@ class BalanceChip extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        // Centred so the three chips read as a balanced strip when the header
+        // stretches them to equal widths.
+        mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           Text(
             known ? Formatters.points(amount) : '—',

@@ -22,8 +22,8 @@ buzzes when something you are actually hunting for shows up.
 | **Wishlist** | Searchable picker over the full skin catalogue; entries in today's shop are flagged inline. |
 | **Collection** | Every skin you own, grouped and counted by rarity. |
 
-Everywhere: a persistent header with your Riot ID, competitive rank, and VP/RP
-balances. Tapping any skin opens a detail page with the full render, every
+Everywhere: a persistent header with your Riot ID, competitive rank, and your
+Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
 colour variant, and each upgrade level labelled with what it unlocks (VFX,
 sound effects, animation, finisher, …).
 
