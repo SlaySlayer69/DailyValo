@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -68,8 +69,7 @@ class NotificationService {
   }) async {
     if (_initialised) return;
 
-    // Needed before anything can be handed to `zonedSchedule`.
-    tz_data.initializeTimeZones();
+    await _initialiseTimeZone();
 
     const InitializationSettings settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -90,6 +90,31 @@ class NotificationService {
     }
 
     _initialised = true;
+  }
+
+  /// Loads the timezone database and points `tz.local` at the device's actual
+  /// zone.
+  ///
+  /// Without this, `tz.local` is UTC, and a delivery time would have to be
+  /// resolved with plain `DateTime` arithmetic — which gets the day the clocks
+  /// change wrong by an hour, and cannot be reasoned about on a device whose
+  /// zone the app never learned. Knowing the real zone also means the
+  /// notification plugin re-derives the correct instant when it re-arms
+  /// scheduled alarms after a reboot.
+  ///
+  /// Falls back to UTC rather than throwing: a wrong-by-an-offset notification
+  /// is worth more than no notification, and the failure is logged.
+  Future<void> _initialiseTimeZone() async {
+    tz_data.initializeTimeZones();
+
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      final TimezoneInfo info = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(info.identifier));
+      Log.d('Notify', 'Local timezone: ${info.identifier}');
+    } on Object catch (e) {
+      Log.e('Notify', 'Could not read the device timezone; using UTC', e);
+    }
   }
 
   /// Asks for POST_NOTIFICATIONS (Android 13+). A refusal is not fatal — the
@@ -158,14 +183,21 @@ class NotificationService {
   /// Android 14 gates behind a special-access screen and which Play treats as a
   /// restricted permission — a heavy ask for a shop digest that is no less
   /// useful a few minutes late.
-  Future<void> scheduleDailyShop(List<String> offerLabels, DateTime at) async {
+  ///
+  /// [at] is zone-aware: the plugin keeps the zone alongside the timestamp, so
+  /// a reboot re-arms the alarm against the same wall clock rather than the
+  /// same offset.
+  Future<void> scheduleDailyShop(
+    List<String> offerLabels,
+    tz.TZDateTime at,
+  ) async {
     if (offerLabels.isEmpty) return;
 
     await _plugin.zonedSchedule(
       id: shopNotificationId,
       title: kAppName,
       body: _shopBody(offerLabels),
-      scheduledDate: _at(at),
+      scheduledDate: at,
       notificationDetails: _shopDetails(offerLabels),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: NotificationPayload.dailyShop,
@@ -174,14 +206,14 @@ class NotificationService {
   }
 
   Future<void> scheduleWishlistHit({
-    required DateTime at,
+    required tz.TZDateTime at,
     List<String> matchedLabels = const <String>[],
   }) async {
     await _plugin.zonedSchedule(
       id: wishlistNotificationId,
       title: kAppName,
       body: _wishlistBody,
-      scheduledDate: _at(at),
+      scheduledDate: at,
       notificationDetails: _wishlistDetails(matchedLabels),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: NotificationPayload.wishlistHit,
@@ -197,15 +229,6 @@ class NotificationService {
     await _plugin.cancel(id: shopNotificationId);
     await _plugin.cancel(id: wishlistNotificationId);
   }
-
-  /// The instant, expressed in UTC.
-  ///
-  /// `zonedSchedule` wants a `TZDateTime`, and naming the device's IANA zone
-  /// would mean another plugin just to read it. UTC sidesteps that: the alarm
-  /// is set from an absolute instant either way, and the local time of day has
-  /// already been resolved into one by [NotificationSchedule].
-  static tz.TZDateTime _at(DateTime when) =>
-      tz.TZDateTime.from(when.toUtc(), tz.UTC);
 
   static String _shopBody(List<String> offerLabels) => offerLabels.join(' - ');
 
