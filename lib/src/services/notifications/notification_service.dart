@@ -2,6 +2,8 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/utils/logger.dart';
 
@@ -66,6 +68,9 @@ class NotificationService {
   }) async {
     if (_initialised) return;
 
+    // Needed before anything can be handed to `zonedSchedule`.
+    tz_data.initializeTimeZones();
+
     const InitializationSettings settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     );
@@ -117,33 +122,12 @@ class NotificationService {
   /// `WeaponSkin.notificationLabel`.
   Future<void> showDailyShop(List<String> offerLabels) async {
     if (offerLabels.isEmpty) return;
-    final String body = offerLabels.join(' - ');
 
     await _plugin.show(
       id: shopNotificationId,
       title: kAppName,
-      body: body,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _shopChannelId,
-          _shopChannel.name,
-          channelDescription: _shopChannel.description,
-          importance: Importance.low,
-          priority: Priority.low,
-          // `silent` suppresses sound *and* the heads-up banner even if the
-          // channel was later loosened by the user.
-          silent: true,
-          playSound: false,
-          enableVibration: false,
-          onlyAlertOnce: true,
-          category: AndroidNotificationCategory.status,
-          // Four `Weapon: Skin` pairs do not fit on one collapsed line.
-          styleInformation: BigTextStyleInformation(
-            body,
-            contentTitle: kAppName,
-          ),
-        ),
-      ),
+      body: _shopBody(offerLabels),
+      notificationDetails: _shopDetails(offerLabels),
       payload: NotificationPayload.dailyShop,
     );
     Log.d('Notify', 'Daily shop notification posted');
@@ -151,32 +135,126 @@ class NotificationService {
 
   /// The wishlist alert. Intentionally terse — the detail is in the app.
   Future<void> showWishlistHit({List<String> matchedLabels = const <String>[]}) async {
-    const String body = 'An item on your wishlist is in your shop!';
-
     await _plugin.show(
       id: wishlistNotificationId,
       title: kAppName,
-      body: body,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          _wishlistChannelId,
-          _wishlistChannel.name,
-          channelDescription: _wishlistChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          category: AndroidNotificationCategory.recommendation,
-          // Expanding shows *which* skins matched without opening the app.
-          styleInformation: matchedLabels.isEmpty
-              ? null
-              : BigTextStyleInformation(
-                  '$body\n\n${matchedLabels.join('\n')}',
-                  contentTitle: kAppName,
-                ),
-        ),
-      ),
+      body: _wishlistBody,
+      notificationDetails: _wishlistDetails(matchedLabels),
       payload: NotificationPayload.wishlistHit,
     );
     Log.d('Notify', 'Wishlist alert posted (${matchedLabels.length} matches)');
+  }
+
+  // --- Deferred delivery -----------------------------------------------------
+
+  /// Posts the daily digest at [at] instead of now.
+  ///
+  /// Handing the alarm to Android rather than waking a background worker at the
+  /// chosen time is deliberate: the OS delivers it whether or not the app gets
+  /// scheduled, and it survives a reboot via the plugin's boot receiver. A
+  /// WorkManager task aimed at 18:00 is at Doze's mercy and can slip by hours.
+  ///
+  /// Inexact on purpose. Exact alarms need `SCHEDULE_EXACT_ALARM`, which
+  /// Android 14 gates behind a special-access screen and which Play treats as a
+  /// restricted permission — a heavy ask for a shop digest that is no less
+  /// useful a few minutes late.
+  Future<void> scheduleDailyShop(List<String> offerLabels, DateTime at) async {
+    if (offerLabels.isEmpty) return;
+
+    await _plugin.zonedSchedule(
+      id: shopNotificationId,
+      title: kAppName,
+      body: _shopBody(offerLabels),
+      scheduledDate: _at(at),
+      notificationDetails: _shopDetails(offerLabels),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: NotificationPayload.dailyShop,
+    );
+    Log.d('Notify', 'Daily shop notification scheduled for $at');
+  }
+
+  Future<void> scheduleWishlistHit({
+    required DateTime at,
+    List<String> matchedLabels = const <String>[],
+  }) async {
+    await _plugin.zonedSchedule(
+      id: wishlistNotificationId,
+      title: kAppName,
+      body: _wishlistBody,
+      scheduledDate: _at(at),
+      notificationDetails: _wishlistDetails(matchedLabels),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: NotificationPayload.wishlistHit,
+    );
+    Log.d('Notify', 'Wishlist alert scheduled for $at');
+  }
+
+  /// Drops any pending scheduled delivery.
+  ///
+  /// Called before scheduling a new one, so a second rotation detected before
+  /// the first was delivered replaces it rather than queueing two digests.
+  Future<void> cancelScheduled() async {
+    await _plugin.cancel(id: shopNotificationId);
+    await _plugin.cancel(id: wishlistNotificationId);
+  }
+
+  /// The instant, expressed in UTC.
+  ///
+  /// `zonedSchedule` wants a `TZDateTime`, and naming the device's IANA zone
+  /// would mean another plugin just to read it. UTC sidesteps that: the alarm
+  /// is set from an absolute instant either way, and the local time of day has
+  /// already been resolved into one by [NotificationSchedule].
+  static tz.TZDateTime _at(DateTime when) =>
+      tz.TZDateTime.from(when.toUtc(), tz.UTC);
+
+  static String _shopBody(List<String> offerLabels) => offerLabels.join(' - ');
+
+  static const String _wishlistBody =
+      'An item on your wishlist is in your shop!';
+
+  NotificationDetails _shopDetails(List<String> offerLabels) {
+    final String body = _shopBody(offerLabels);
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _shopChannelId,
+        _shopChannel.name,
+        channelDescription: _shopChannel.description,
+        importance: Importance.low,
+        priority: Priority.low,
+        // `silent` suppresses sound *and* the heads-up banner even if the
+        // channel was later loosened by the user.
+        silent: true,
+        playSound: false,
+        enableVibration: false,
+        onlyAlertOnce: true,
+        category: AndroidNotificationCategory.status,
+        // Four `Weapon: Skin` pairs do not fit on one collapsed line.
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: kAppName,
+        ),
+      ),
+    );
+  }
+
+  NotificationDetails _wishlistDetails(List<String> matchedLabels) {
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _wishlistChannelId,
+        _wishlistChannel.name,
+        channelDescription: _wishlistChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+        category: AndroidNotificationCategory.recommendation,
+        // Expanding shows *which* skins matched without opening the app.
+        styleInformation: matchedLabels.isEmpty
+            ? null
+            : BigTextStyleInformation(
+                '$_wishlistBody\n\n${matchedLabels.join('\n')}',
+                contentTitle: kAppName,
+              ),
+      ),
+    );
   }
 
   Future<void> cancelAll() => _plugin.cancelAll();

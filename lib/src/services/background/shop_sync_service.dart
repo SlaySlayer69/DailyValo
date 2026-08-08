@@ -6,6 +6,7 @@ import '../../features/content/data/models/weapon_skin.dart';
 import '../../features/store/data/models/shop.dart';
 import '../../features/store/data/models/storefront_snapshot.dart';
 import '../../features/wishlist/data/models/wishlist_entry.dart';
+import '../notifications/notification_schedule.dart';
 
 /// What a sync did, so the caller (and the tests) can tell.
 class ShopSyncOutcome {
@@ -14,6 +15,7 @@ class ShopSyncOutcome {
     required this.wishlistMatches,
     required this.nextResetAt,
     this.skipped,
+    this.notificationsDeferredUntil,
   });
 
   /// The four offers differ from the ones we last saw.
@@ -26,6 +28,10 @@ class ShopSyncOutcome {
 
   /// Non-null when nothing was done, with the reason.
   final String? skipped;
+
+  /// Set when the user chose a delivery time and the notifications were handed
+  /// to Android for later rather than posted now.
+  final DateTime? notificationsDeferredUntil;
 
   bool get didWork => skipped == null;
 
@@ -86,33 +92,71 @@ class ShopSyncService {
 
     Log.d('Sync', 'Shop rotated — ${currentIds.length} new offers');
 
-    if (_deps.localStore.setting<bool>(
-      SettingKeys.shopNotificationsEnabled,
-      true,
-    )) {
-      await _deps.notifications.showDailyShop(_labelsFor(shop));
-    }
-
     // The wishlist alert is a *separate* notification on a *separate* channel,
     // fired only when there is a match — so a normal reset never buzzes.
     final List<WishlistEntry> matches = _deps.wishlist.matching(currentIds);
-    if (matches.isNotEmpty &&
-        _deps.localStore.setting<bool>(
-          SettingKeys.wishlistNotificationsEnabled,
-          true,
-        )) {
-      await _deps.notifications.showWishlistHit(
-        matchedLabels: matches
-            .map((WishlistEntry e) => e.label)
-            .toList(growable: false),
-      );
-    }
+
+    final DateTime? deferredUntil = await _notify(shop, matches);
 
     return ShopSyncOutcome(
       shopChanged: true,
       wishlistMatches: matches,
       nextResetAt: shop.dailyResetAt,
+      notificationsDeferredUntil: deferredUntil,
     );
+  }
+
+  /// Posts both notifications, now or at the user's chosen time.
+  ///
+  /// Returns the delivery time when it was deferred, null when posted straight
+  /// away. Detection is unaffected either way — only the delivery moves, and
+  /// the shop cannot change again between reset and the chosen hour, so a held
+  /// notification is still accurate when it lands.
+  Future<DateTime?> _notify(Shop shop, List<WishlistEntry> matches) async {
+    final NotificationSchedule schedule = NotificationSchedule.read(
+      _deps.localStore,
+    );
+
+    final bool wantsShop = _deps.localStore.setting<bool>(
+      SettingKeys.shopNotificationsEnabled,
+      true,
+    );
+    final bool wantsWishlist =
+        matches.isNotEmpty &&
+        _deps.localStore.setting<bool>(
+          SettingKeys.wishlistNotificationsEnabled,
+          true,
+        );
+
+    final List<String> matchLabels = matches
+        .map((WishlistEntry e) => e.label)
+        .toList(growable: false);
+
+    if (!schedule.enabled) {
+      if (wantsShop) await _deps.notifications.showDailyShop(_labelsFor(shop));
+      if (wantsWishlist) {
+        await _deps.notifications.showWishlistHit(matchedLabels: matchLabels);
+      }
+      return null;
+    }
+
+    final DateTime at = schedule.nextDeliveryAfter(DateTime.now());
+
+    // A second rotation before the first was delivered replaces it, rather
+    // than leaving yesterday's digest queued behind today's.
+    await _deps.notifications.cancelScheduled();
+
+    if (wantsShop) {
+      await _deps.notifications.scheduleDailyShop(_labelsFor(shop), at);
+    }
+    if (wantsWishlist) {
+      await _deps.notifications.scheduleWishlistHit(
+        at: at,
+        matchedLabels: matchLabels,
+      );
+    }
+    Log.d('Sync', 'Notifications deferred to $at');
+    return at;
   }
 
   /// `Vandal: Prime` for each offer, in shop order.

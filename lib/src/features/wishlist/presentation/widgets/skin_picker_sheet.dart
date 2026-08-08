@@ -163,7 +163,7 @@ class _SkinList extends ConsumerWidget {
   }
 
   List<WeaponSkin> _filter() {
-    final List<WeaponSkin> pool = catalog.purchasableSkins;
+    final List<WeaponSkin> pool = catalog.browsableSkins;
     if (query.isEmpty) return pool;
     return pool
         .where(

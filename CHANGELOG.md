@@ -4,6 +4,24 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v2.2.0
+
+**Notification time.** A new setting lets you pick when your notifications
+arrive. Off by default, so they keep coming as soon as the shop rotates at
+00:00 UTC — which is the middle of the night here. Turn it on, pick an hour,
+and both notifications wait for it. The shop is still read at reset, so what
+arrives at 09:00 is exactly what rotated at 02:00.
+
+**Filter your collection by rarity.** The rarity counts above the grid are now
+buttons. Tap Ultra to see only your Ultras, tap Premium as well to see both,
+tap again to switch one off. The counts keep showing your full totals while a
+filter is active, and a Clear button appears once anything is selected.
+
+**Add skins is sorted properly.** The picker used to list ~1600 skins in
+whatever order the API returned them. It now runs in buy-menu order — Sidearm,
+SMG, Shotgun, Rifle, Sniper, Heavy, then melee — alphabetically by weapon inside
+each class, and rarest first for each weapon. Searching keeps that order.
+
 ## v2.1.0
 
 Tapping a skin in the wishlist opens its preview instead of removing it.
