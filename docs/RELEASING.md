@@ -22,29 +22,40 @@ that key is generated fresh for every job — so two debug-signed releases canno
 update *each other* either. That is why the Release workflow refuses to publish
 one unless the run explicitly ticks **Publish a test build**.
 
-### Generating it from a phone
+### Setting it up from a phone
 
-*Actions ▸ Generate a signing key ▸ Run workflow.* It creates the keystore and
-uploads it as a private artifact — the key is never printed to the log, because
-anyone able to read a workflow log could otherwise sign an APK that Android
-would accept as an update to yours.
+One manual step, then a button.
 
-Download the **signing-key** artifact, then add four repository secrets under
-*Settings ▸ Secrets and variables ▸ Actions*, pasting the contents of the
-matching file:
+1. Create a **fine-grained personal access token** at
+   *GitHub ▸ Settings ▸ Developer settings ▸ Personal access tokens ▸
+   Fine-grained tokens*. Give it access to this repository only, and under
+   *Repository permissions* set **Secrets: Read and write**.
+2. Save it as a repository secret named `GH_SECRETS_TOKEN` under
+   *Settings ▸ Secrets and variables ▸ Actions*.
+3. *Actions ▸ Generate a signing key ▸ Run workflow.*
 
-| Secret | File in the artifact |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `ANDROID_KEYSTORE_BASE64.txt` |
-| `ANDROID_KEYSTORE_PASSWORD` | `ANDROID_KEYSTORE_PASSWORD.txt` |
-| `ANDROID_KEY_ALIAS` | `ANDROID_KEY_ALIAS.txt` |
-| `ANDROID_KEY_PASSWORD` | `ANDROID_KEY_PASSWORD.txt` |
+The workflow generates the keystore and writes all four signing secrets itself.
+Afterwards you can delete `GH_SECRETS_TOKEN` and the token — nothing needs them
+again.
 
-**Keep `dailyvalo-release.jks` somewhere safe and backed up.** If it is lost, no
-future build can ever update an installed DailyValo — every user has to
-uninstall and lose their wishlist. The artifact expires after seven days.
+**Why a token at all?** A workflow's built-in `GITHUB_TOKEN` cannot write
+secrets. Something has to, and one short token pasted once beats pasting a
+3,600-character base64 blob by hand on a phone keyboard.
+
+**Why the key is never handed back.** The obvious alternative — upload the
+keystore as an artifact and paste the values yourself — does not work here.
+Artifacts can be downloaded by anyone who can read the repository, and this
+repository is public, so that would publish the private key. Anyone holding it
+could sign an APK that Android accepts as an update to yours. The key goes from
+the runner into secret storage and nowhere else.
+
+The consequence: **the secrets are the only copy.** That is survivable — if they
+are lost, generate a new key and reinstall once — but there is no off-site
+backup unless you make one, which means generating the key yourself.
 
 ### Generating it on a computer instead
+
+Do this if you want a backup you control.
 
 ```bash
 keytool -genkeypair -v -keystore dailyvalo-release.jks -storetype PKCS12 \
@@ -52,7 +63,10 @@ keytool -genkeypair -v -keystore dailyvalo-release.jks -storetype PKCS12 \
 base64 -w0 dailyvalo-release.jks   # the value for ANDROID_KEYSTORE_BASE64
 ```
 
-Then add the same four secrets.
+Then add four secrets by hand — `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`dailyvalo`) and
+`ANDROID_KEY_PASSWORD` — and keep the `.jks` somewhere safe. **If it is lost, no
+future build can ever update an installed DailyValo.**
 
 ### After the switch
 

@@ -19,7 +19,7 @@ daily shop, with the full render, chromas and preview clips.
 longer published by accident. They were signed with a throwaway key generated
 per build, which meant no release could ever update another — you had to
 uninstall and lose your wishlist every time. Publishing an unsigned test build
-is now a deliberate choice, and a new workflow generates a real signing key
+is now a deliberate choice, and a new workflow sets up a real signing key
 without needing a computer.
 
 ## v2.2.0
