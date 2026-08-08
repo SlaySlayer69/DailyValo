@@ -1,8 +1,32 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing, read from `android/key.properties` locally or from the
+// environment in CI. Both are absent on a fresh clone, which is deliberate: the
+// build still works, it just falls back to the debug key.
+//
+// This matters more than it looks. Android identifies an app by its signature,
+// so two builds signed with different keys cannot replace one another — the
+// install fails and the only way through is to uninstall, which takes the
+// wishlist and cached collection with it. The debug keystore is generated per
+// machine, so debug-signed releases from a laptop and from a CI runner are
+// *different apps* to Android. One real key, used everywhere, is what makes
+// upgrades work.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(property: String, env: String): String? =
+    keystoreProperties.getProperty(property) ?: System.getenv(env)
+
+val keystorePath = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
+val hasReleaseKey = keystorePath != null && file(keystorePath).exists()
 
 android {
     namespace = "com.dailyvalo.dailyvalo"
@@ -39,11 +63,34 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword =
+                    signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Replace with a real signing config before publishing.
-            // Debug keys keep `flutter run --release` working in the meantime.
-            signingConfig = signingConfigs.getByName("debug")
+            // Falls back to the debug key when no release keystore is
+            // configured, so `flutter build apk --release` keeps working on a
+            // fresh clone. A build that falls back is fine for testing and
+            // unfit for distribution — see docs/RELEASING.md.
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "DailyValo: no release keystore found, signing with the " +
+                        "debug key. This APK cannot upgrade an install signed " +
+                        "by any other machine.",
+                )
+                signingConfigs.getByName("debug")
+            }
 
             isMinifyEnabled = true
             isShrinkResources = true
