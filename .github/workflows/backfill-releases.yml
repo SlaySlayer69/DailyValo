@@ -1,0 +1,170 @@
+name: Backfill releases
+
+# Creates the tag and the GitHub Release for every version in tool/versions.tsv,
+# for the history that predates the Release workflow.
+#
+# Run it from Actions ▸ Backfill releases ▸ Run workflow — on a laptop or from
+# the GitHub mobile app; it needs nothing checked out locally either way.
+#
+# Existing tags and releases are left alone, so it is safe to re-run after
+# adding a version to tool/versions.tsv.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_apks:
+        description: >-
+          Rebuild each old version and attach its APKs. Slow (a build per
+          version) and best-effort — old tags do not always build with a current
+          toolchain. Off by default: the changelog is the point of an archival
+          release, and the APK for anything but the newest version is not
+          something anyone should install.
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.read.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create any missing tags
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          while IFS=$'\t' read -r tag sha; do
+            case "$tag" in ''|\#*) continue ;; esac
+
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "$tag already tagged"
+              continue
+            fi
+            if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+              echo "::warning::$tag points at $sha, which is not in this \
+          repository. Skipping."
+              continue
+            fi
+            git tag -a "$tag" "$sha" -m "DailyValo $tag"
+            echo "tagged $tag at $sha"
+          done < tool/versions.tsv
+
+          git push origin --tags
+
+      - name: Read the version list into a matrix
+        id: read
+        run: |
+          versions=$(grep -v '^#' tool/versions.tsv \
+            | grep -v '^[[:space:]]*$' \
+            | cut -f1 \
+            | jq -R . | jq -sc .)
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          echo "$versions"
+
+  publish:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      # One version that will not build must not stop the other eight.
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        version: ${{ fromJson(needs.plan.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip versions that already have a release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ matrix.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.version }} already released"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull this version's section out of the changelog
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          awk -v tag="## ${{ matrix.version }}" '
+            $0 == tag { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/notes.md
+
+          if [ ! -s /tmp/notes.md ]; then
+            echo "No changelog entry for ${{ matrix.version }}." > /tmp/notes.md
+          fi
+
+      # --- optional: rebuild the historical APK ------------------------------
+      - uses: subosito/flutter-action@v2
+        if: steps.existing.outputs.exists == 'false' && inputs.build_apks
+        with:
+          # Pinned rather than read from pubspec.yaml, which carries only a Dart
+          # constraint. Every version in tool/versions.tsv was built with this.
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        if: steps.existing.outputs.exists == 'false' && inputs.build_apks
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Rebuild ${{ matrix.version }}
+        id: build
+        if: steps.existing.outputs.exists == 'false' && inputs.build_apks
+        continue-on-error: true
+        run: |
+          git checkout --detach "${{ matrix.version }}"
+          flutter pub get
+          flutter build apk --release --split-per-abi
+
+          v="${{ matrix.version }}"; v="${v#v}"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             "dist/DailyValo-$v-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             "dist/DailyValo-$v-armeabi-v7a.apk"
+
+      - name: Note that the archival APK is debug-signed
+        if: steps.build.outcome == 'success'
+        run: |
+          {
+            echo
+            echo '> Archival rebuild from the tag, debug-signed — it will not'
+            echo '> install over a DailyValo signed with the release key.'
+            echo '> Kept for the record, not for installing.'
+          } >> /tmp/notes.md
+
+      - name: Say so when the rebuild failed
+        if: steps.build.outcome == 'failure'
+        run: |
+          {
+            echo
+            echo '> This version no longer builds with a current toolchain, so'
+            echo '> no APK is attached. The source at this tag is intact.'
+          } >> /tmp/notes.md
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.existing.outputs.exists == 'false'
+        with:
+          tag_name: ${{ matrix.version }}
+          name: DailyValo ${{ matrix.version }}
+          body_path: /tmp/notes.md
+          files: dist/*.apk
+          fail_on_unmatched_files: false
+          # Backfilled history must not steal "Latest" from the newest release.
+          make_latest: false
