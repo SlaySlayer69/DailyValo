@@ -67,6 +67,16 @@ a reboot. It is deliberately an *inexact* alarm — exact ones need
 `SCHEDULE_EXACT_ALARM`, a restricted permission, which is a heavy ask for a shop
 digest that is no worse for being a few minutes late.
 
+The chosen time is a **wall clock in the device's own timezone**, read via
+`flutter_timezone` and resolved against the IANA database. That is not
+pedantry: computing the target by adding nine hours to midnight lands at 10:00
+on the day the clocks go forward, because a duration is absolute and a clock
+change is not. Building the moment from wall-clock components in a real zone
+gets both transitions right, and the notification plugin stores the zone
+alongside the alarm so a reboot re-arms against the same wall clock rather than
+the same offset. Both clock-change days are covered by tests against the real
+database.
+
 ---
 
 ## Getting started
@@ -74,7 +84,7 @@ digest that is no worse for being a few minutes late.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 152 unit tests, no device needed
+flutter test                # 159 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -281,7 +291,7 @@ afterwards.
 
 ## Testing
 
-152 unit tests, no device or network required:
+159 unit tests, no device or network required:
 
 ```
 test/

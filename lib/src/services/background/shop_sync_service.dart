@@ -1,3 +1,5 @@
+import 'package:timezone/timezone.dart' as tz;
+
 import '../../app/dependencies.dart';
 import '../../core/constants/storage_keys.dart';
 import '../../core/utils/logger.dart';
@@ -140,7 +142,10 @@ class ShopSyncService {
       return null;
     }
 
-    final DateTime at = schedule.nextDeliveryAfter(DateTime.now());
+    // In the device's own zone, so "09:00" survives a clock change.
+    final tz.TZDateTime at = schedule.nextDeliveryAfter(
+      tz.TZDateTime.now(tz.local),
+    );
 
     // A second rotation before the first was delivered replaces it, rather
     // than leaving yesterday's digest queued behind today's.

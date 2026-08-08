@@ -4,6 +4,15 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v2.2.2
+
+**Notification time survives the clock change.** The delivery time is now a
+wall clock in your own timezone rather than a fixed offset. Before this, on the
+two days a year the clocks change, a notification set for 09:00 would have
+arrived at 08:00 or 10:00 — the target was computed by adding hours to midnight,
+and a duration does not know about daylight saving. Both transitions are now
+resolved against the real timezone database.
+
 ## v2.2.1
 
 **Featured Bundles open up.** Tap a bundle to see what is actually in it: every

@@ -1,3 +1,5 @@
+import 'package:timezone/timezone.dart' as tz;
+
 import '../../core/constants/storage_keys.dart';
 import '../../core/storage/local_store.dart';
 
@@ -12,6 +14,12 @@ import '../../core/storage/local_store.dart';
 /// Turned on, the *detection* still happens at reset; only the delivery moves.
 /// Nothing about the shop changes between reset and the chosen hour, so a
 /// notification held back is still accurate when it arrives.
+///
+/// The chosen time is a **wall clock** in the device's own timezone, not an
+/// offset from UTC. That distinction is the whole reason this works in terms of
+/// `TZDateTime` rather than plain `DateTime`: "09:00" has to mean 09:00 on the
+/// last Sunday in March too, and simple date arithmetic gets that wrong by an
+/// hour because it adds absolute time across a clock change.
 class NotificationSchedule {
   const NotificationSchedule({
     required this.enabled,
@@ -48,18 +56,39 @@ class NotificationSchedule {
     ),
   );
 
-  /// The next moment matching the configured time, strictly after [from].
+  /// The next moment the clock reads [label] in [from]'s zone, strictly after
+  /// [from].
   ///
-  /// Strictly, so a sync that happens to run exactly at the chosen minute
-  /// schedules for tomorrow rather than for a moment that has already passed —
-  /// `zonedSchedule` rejects a date that is not in the future.
-  DateTime nextDeliveryAfter(DateTime from) {
-    final DateTime today = DateTime(
+  /// Built from wall-clock components rather than by adding a duration, so the
+  /// timezone database resolves the offset that will actually be in effect on
+  /// that date. Adding `Duration(hours: 9)` to midnight yields 10:00 on the day
+  /// the clocks go forward.
+  ///
+  /// Strictly after, so a sync running exactly on the chosen minute schedules
+  /// for tomorrow — `zonedSchedule` rejects a date that is not in the future.
+  tz.TZDateTime nextDeliveryAfter(tz.TZDateTime from) {
+    final tz.Location location = from.location;
+
+    final tz.TZDateTime today = tz.TZDateTime(
+      location,
       from.year,
       from.month,
       from.day,
-    ).add(Duration(minutes: minuteOfDay));
-    return today.isAfter(from) ? today : today.add(const Duration(days: 1));
+      hour,
+      minute,
+    );
+    if (today.isAfter(from)) return today;
+
+    // Day + 1 rather than `add(Duration(days: 1))`, for the same reason: the
+    // next calendar day at this wall-clock time may be 23 or 25 hours away.
+    return tz.TZDateTime(
+      location,
+      from.year,
+      from.month,
+      from.day + 1,
+      hour,
+      minute,
+    );
   }
 
   NotificationSchedule copyWith({bool? enabled, int? minuteOfDay}) =>
