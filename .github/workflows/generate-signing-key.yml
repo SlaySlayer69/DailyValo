@@ -1,18 +1,32 @@
 name: Generate a signing key
 
-# Creates the Android release keystore, once, without needing a computer.
+# Creates the Android release keystore and stores it in this repository's
+# secrets, once, without needing a computer.
 #
-# GitHub Actions cannot write repository secrets — only a human can — so this
-# hands you the four values to paste into
-# Settings ▸ Secrets and variables ▸ Actions.
+# ## Why a token is required
 #
-# The key is uploaded as a private artifact and never printed to the log:
-# anyone who can read a workflow log could otherwise sign an APK that Android
-# would accept as an update to yours.
+# A workflow's built-in GITHUB_TOKEN cannot write repository secrets — only a
+# human or a token acting for one can. So the single manual step is creating a
+# fine-grained personal access token with "Secrets: read and write" on this
+# repository and saving it as the secret GH_SECRETS_TOKEN. After this workflow
+# has run you can delete that token; it is never needed again.
 #
-#   ⚠️ Download the artifact and keep it somewhere safe. If the key is lost,
-#   no future build can ever update an installed DailyValo — every user has to
-#   uninstall and lose their wishlist.
+# ## Why the key is never handed back
+#
+# The obvious alternative — upload the keystore as an artifact and let you paste
+# the values yourself — does not work here. Artifacts are downloadable by anyone
+# who can read the repository, and this repository is public, so that would
+# publish the private key to the world. Anyone holding it could sign an APK that
+# Android accepts as an update to yours. The key therefore never leaves the
+# runner except into the repository's own secret storage, and never appears in a
+# log.
+#
+# ## Backups
+#
+# The consequence is that the secrets are the only copy. Losing them is
+# survivable — regenerate the key and reinstall once — but if you want an
+# off-site backup, generate the key on a machine you control instead. See
+# docs/RELEASING.md.
 
 on:
   workflow_dispatch:
@@ -21,6 +35,12 @@ on:
         description: 'How long the certificate stays valid.'
         type: string
         default: '30'
+      overwrite:
+        description: >-
+          Replace an existing key. Only do this knowingly: every install signed
+          with the old key has to be uninstalled before it can be updated again.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,71 +48,111 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_SECRETS_TOKEN }}
     steps:
+      - name: Check the token is present
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::No GH_SECRETS_TOKEN secret. Create a fine-grained \
+          personal access token with 'Secrets: read and write' on this \
+          repository, save it as GH_SECRETS_TOKEN, and run this again. See \
+          docs/RELEASING.md."
+            exit 1
+          fi
+
+      - name: Refuse to clobber an existing key by accident
+        run: |
+          if gh secret list --repo '${{ github.repository }}' \
+             | grep -q '^ANDROID_KEYSTORE_BASE64'; then
+            if [ "${{ inputs.overwrite }}" != "true" ]; then
+              echo "::error::A signing key is already configured. Replacing it \
+          means every existing install must be uninstalled before it can be \
+          updated. Re-run with 'Replace an existing key' ticked if that is \
+          really what you want."
+              exit 1
+            fi
+            echo "::warning::Replacing the existing signing key."
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Generate the keystore
-        id: gen
+      - name: Generate the keystore and store it in the repository secrets
         run: |
           set -euo pipefail
-          mkdir -p out
+          umask 077
+          work=$(mktemp -d)
 
-          # Random passwords: nobody has to invent, remember or type these —
-          # they live in the repository secrets and nowhere else.
-          store_pass=$(openssl rand -base64 24 | tr -d '\n/+=' | head -c 32)
-          key_pass="$store_pass"
+          # Random, because nobody has to type or remember this: it goes
+          # straight into secret storage and is read only by the build.
+          store_pass=$(openssl rand -base64 32 | tr -d '\n/+=' | head -c 40)
+          echo "::add-mask::$store_pass"
 
           days=$(( ${{ inputs.validity_years }} * 365 ))
 
           keytool -genkeypair -v \
-            -keystore out/dailyvalo-release.jks \
+            -keystore "$work/release.jks" \
             -storetype PKCS12 \
             -keyalg RSA -keysize 2048 -validity "$days" \
             -alias dailyvalo \
-            -storepass "$store_pass" -keypass "$key_pass" \
-            -dname "CN=DailyValo, OU=DailyValo, O=DailyValo, L=-, ST=-, C=DE"
+            -storepass "$store_pass" -keypass "$store_pass" \
+            -dname "CN=DailyValo, OU=DailyValo, O=DailyValo, L=-, ST=-, C=DE" \
+            > /dev/null 2>&1
 
-          base64 -w0 out/dailyvalo-release.jks > out/ANDROID_KEYSTORE_BASE64.txt
-          printf '%s' "$store_pass" > out/ANDROID_KEYSTORE_PASSWORD.txt
-          printf '%s' "dailyvalo"  > out/ANDROID_KEY_ALIAS.txt
-          printf '%s' "$key_pass"  > out/ANDROID_KEY_PASSWORD.txt
+          base64 -w0 "$work/release.jks" > "$work/keystore.b64"
 
-          # Masked so an accidental `echo` later in the job cannot leak it.
-          echo "::add-mask::$store_pass"
+          # Piped from files rather than passed as arguments, so no key material
+          # reaches a command line or a log.
+          gh secret set ANDROID_KEYSTORE_BASE64 \
+            --repo '${{ github.repository }}' < "$work/keystore.b64"
+
+          printf '%s' "$store_pass" | gh secret set ANDROID_KEYSTORE_PASSWORD \
+            --repo '${{ github.repository }}'
+          printf '%s' "$store_pass" | gh secret set ANDROID_KEY_PASSWORD \
+            --repo '${{ github.repository }}'
+          printf '%s' 'dailyvalo' | gh secret set ANDROID_KEY_ALIAS \
+            --repo '${{ github.repository }}'
+
+          rm -rf "$work"
+
+      - name: Confirm the four secrets exist
+        run: |
+          # Names only — `gh secret list` never prints values.
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD \
+                      ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if gh secret list --repo '${{ github.repository }}' \
+               | grep -q "^$name"; then
+              echo "✓ $name"
+            else
+              echo "::error::$name was not stored."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
 
           {
-            echo '## Your signing key is ready'
+            echo '## Signing key configured'
             echo
-            echo 'Download the **signing-key** artifact from this run. It holds'
-            echo 'the keystore and one text file per secret.'
+            echo 'All four secrets are stored. Releases from now on are signed'
+            echo 'properly — no test-build warning, and every future release can'
+            echo 'update the one before it.'
             echo
-            echo 'Then add four repository secrets under'
-            echo '*Settings ▸ Secrets and variables ▸ Actions*, pasting the'
-            echo 'contents of the matching file:'
+            echo '**Next:** *Actions ▸ Release ▸ Run workflow*, enter the'
+            echo 'version tag, and leave *Publish a test build* unticked.'
             echo
-            echo '| Secret | File |'
-            echo '| --- | --- |'
-            echo '| `ANDROID_KEYSTORE_BASE64` | `ANDROID_KEYSTORE_BASE64.txt` |'
-            echo '| `ANDROID_KEYSTORE_PASSWORD` | `ANDROID_KEYSTORE_PASSWORD.txt` |'
-            echo '| `ANDROID_KEY_ALIAS` | `ANDROID_KEY_ALIAS.txt` |'
-            echo '| `ANDROID_KEY_PASSWORD` | `ANDROID_KEY_PASSWORD.txt` |'
+            echo 'The first properly signed release still needs a one-time'
+            echo 'uninstall on any phone carrying an older, debug-signed build.'
             echo
-            echo '> ⚠️ **Keep `dailyvalo-release.jks` somewhere safe.** Lose it'
-            echo '> and no future build can ever update an installed DailyValo.'
-            echo '> This artifact expires, so download it now.'
+            echo '### Two housekeeping notes'
             echo
-            echo 'The first release signed with the new key still needs a'
-            echo 'one-time uninstall on any device carrying a debug-signed'
-            echo 'build. After that, updates work normally forever.'
+            echo '- You can delete the `GH_SECRETS_TOKEN` secret and the token'
+            echo '  itself now. Nothing needs it again.'
+            echo '- These secrets are the only copy of the key. That is'
+            echo '  deliberate — handing it back through an artifact would'
+            echo '  publish it, since this repository is public. Losing them is'
+            echo '  survivable: generate a new key and reinstall once.'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: signing-key
-          path: out/
-          # Long enough to notice the run, short enough that a private key is
-          # not sitting in artifact storage indefinitely.
-          retention-days: 7
