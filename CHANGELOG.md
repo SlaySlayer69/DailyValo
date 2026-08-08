@@ -4,6 +4,34 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.0.0
+
+**Share your shop as an image.** A share button on the Daily Shop and the Night
+Market turns the offers into a clean card — app name centred at the top, one row
+per skin with artwork and price, discounts marked — and hands it to Android's
+share sheet, so it goes wherever you send things: WhatsApp, Discord, a group
+chat, your gallery.
+
+It is a purpose-built image, not a screenshot: no status bar, no half-scrolled
+list, the same 1080px card from every phone.
+
+**Home screen widget.** Today's four offers and the time left to buy them, right
+on the home screen. It updates with the background check, so it stays current
+without opening the app, and tapping it opens the shop.
+
+**Export and import your wishlist.** Two buttons at the bottom of the wishlist —
+in the middle of it when it is empty, which is exactly when you need the import.
+Export writes a small file you can send anywhere or keep as a backup; import
+merges it in, so restoring a backup never deletes what is already there and
+importing twice changes nothing the second time.
+
+**Collection value.** The Collection tab now shows what your skins are worth at
+shop prices, and the number follows the rarity filter. It is labelled an
+estimate on purpose: Riot publishes no prices and no purchase history, so this
+is what these skins *cost*, never what you paid — Night Market and bundle
+discounts leave no trace anywhere the app can read. Skins that were never sold,
+like battlepass rewards, are counted separately instead of being guessed at.
+
 ## v2.2.2
 
 **Notification time survives the clock change.** The delivery time is now a

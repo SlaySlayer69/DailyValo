@@ -1,6 +1,7 @@
 import '../../../../core/storage/local_store.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../models/wishlist_entry.dart';
+import '../wishlist_transfer.dart';
 
 /// The wishlist, persisted in Hive.
 ///
@@ -55,6 +56,28 @@ class WishlistRepository {
     }
     await add(skin);
     return true;
+  }
+
+  /// Adds entries from an export, keeping anything already on the list.
+  ///
+  /// A merge rather than a replace: importing a friend's list, or an older
+  /// backup, should not silently delete what is already there. Existing entries
+  /// win, so their original `addedAt` — and with it their place in the list —
+  /// survives.
+  Future<ImportResult> importEntries(List<WishlistEntry> entries) async {
+    int added = 0;
+    int present = 0;
+
+    for (final WishlistEntry entry in entries) {
+      if (contains(entry.skinUuid)) {
+        present++;
+        continue;
+      }
+      await _store.putWishlistEntry(entry.skinUuid, entry.toJson());
+      added++;
+    }
+
+    return ImportResult(added: added, alreadyPresent: present);
   }
 
   /// Wishlist entries whose skin is among [offerIds].

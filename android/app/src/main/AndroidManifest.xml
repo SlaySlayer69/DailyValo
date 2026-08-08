@@ -49,6 +49,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Home screen widget. Reads what Flutter wrote via home_widget, so it
+             renders while the app is not running. -->
+        <receiver
+            android:name=".DailyShopWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/daily_shop_widget_info" />
+        </receiver>
     </application>
 
     <!-- Required to query activities that can process text, see:

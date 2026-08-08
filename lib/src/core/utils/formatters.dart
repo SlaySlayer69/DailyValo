@@ -25,6 +25,11 @@ abstract final class Formatters {
   }
 
   /// `SlaySlayer` + `161` -> `SlaySlayer#161`
+  /// `8 August 2026` — spelled out, because a shared image is read by people
+  /// who do not know whether the sender writes 8/9 or 9/8.
+  static String shareDate(DateTime when) =>
+      DateFormat('d MMMM yyyy', 'en_US').format(when);
+
   static String riotId(String gameName, String tagLine) =>
       tagLine.isEmpty ? gameName : '$gameName#$tagLine';
 

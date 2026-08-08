@@ -19,8 +19,8 @@ buzzes when something you are actually hunting for shows up.
 | --- | --- |
 | **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
-| **Wishlist** | Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
-| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those. |
+| **Wishlist** | Exportable and importable as a file. Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
+| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those — and the tab shows what the selection is worth at shop prices. |
 
 Everywhere: a persistent header with your Riot ID, competitive rank, and your
 Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
@@ -77,6 +77,21 @@ alongside the alarm so a reboot re-arms against the same wall clock rather than
 the same offset. Both clock-change days are covered by tests against the real
 database.
 
+**Sharing and the home screen.** The share button on the shop and the Night
+Market renders a purpose-built 1080px card off-screen and hands the PNG to
+Android's share sheet — not a screenshot, so there is no status bar, no
+half-scrolled list, and it looks the same from every phone. The home screen
+widget shows the four offers as text rather than a rendered bitmap: a widget is
+re-inflated on wallpaper changes, launcher restarts and rotation, and text
+redraws correctly through all of them where a cached image would go stale.
+
+**What a collection is worth.** Riot publishes no prices and no purchase
+history, so the Collection total is derived from the price points Riot uses per
+rarity — doubled for melee, which is priced differently and is exactly what
+people collect. That makes it an estimate of what the skins *cost*, never of
+what was paid: Night Market and bundle discounts leave no trace the app can
+read. Skins that were never sold are counted separately rather than guessed at.
+
 ---
 
 ## Getting started
@@ -84,7 +99,7 @@ database.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 159 unit tests, no device needed
+flutter test                # 180 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -141,6 +156,7 @@ lib/
     │   └── home/                    Tab shell + settings sheet
     └── services/
         ├── notifications/           Channels and the two notification shapes
+        ├── widgets/                 Home screen widget bridge
         └── background/              WorkManager dispatcher + sync service
 ```
 
@@ -291,7 +307,7 @@ afterwards.
 
 ## Testing
 
-159 unit tests, no device or network required:
+180 unit tests, no device or network required:
 
 ```
 test/

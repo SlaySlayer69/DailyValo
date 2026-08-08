@@ -9,8 +9,10 @@ import '../../../../core/widgets/state_views.dart';
 import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/skin_ordering.dart';
+import '../../../content/data/models/skin_pricing.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../../../content/presentation/widgets/tier_badge.dart';
+import '../../../player/presentation/widgets/currency_chip.dart';
 import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 
 /// Tab 4 — every skin the account owns, grouped by rarity.
@@ -134,6 +136,14 @@ class _CollectionBodyState extends State<_CollectionBody> {
                       ),
               ),
               const SizedBox(height: AppSpacing.md),
+              _ValuePanel(
+                value: CollectionValue.of(
+                  visible,
+                  (WeaponSkin s) => catalog?.tierOf(s),
+                ),
+                isFiltered: _selected.isNotEmpty,
+              ),
+              const SizedBox(height: AppSpacing.md),
               _TierFilter(
                 counts: byTier,
                 catalog: catalog,
@@ -172,6 +182,84 @@ class _CollectionBodyState extends State<_CollectionBody> {
         ),
       ],
     );
+  }
+}
+
+/// What the collection is worth at shop prices.
+///
+/// Deliberately labelled an estimate. Riot publishes no prices and no purchase
+/// history, so this is what these skins *cost*, never what was paid for them —
+/// see [SkinPricing].
+class _ValuePanel extends StatelessWidget {
+  const _ValuePanel({required this.value, required this.isFiltered});
+
+  final CollectionValue value;
+  final bool isFiltered;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.card,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(
+                isFiltered ? 'SELECTION VALUE' : 'COLLECTION VALUE',
+                style: text.labelSmall,
+              ),
+              const Spacer(),
+              Text(
+                'ESTIMATE',
+                style: text.labelSmall?.copyWith(color: AppColors.textTertiary),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: <Widget>[
+              CurrencyAmount(
+                amount: value.totalVp,
+                iconSize: 18,
+                style: text.headlineMedium?.copyWith(
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            _explanation,
+            style: text.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _explanation {
+    final String base =
+        'Full shop price of ${value.pricedCount} '
+        '${value.pricedCount == 1 ? 'skin' : 'skins'} — not what you paid, '
+        'since Riot exposes no purchase history and discounts leave no trace.';
+
+    if (value.isComplete) return base;
+    return '$base ${value.unpricedCount} '
+        '${value.unpricedCount == 1 ? 'skin was' : 'skins were'} never sold '
+        '(battlepass or event rewards) and ${value.unpricedCount == 1 ? 'is' : 'are'} '
+        'left out.';
   }
 }
 

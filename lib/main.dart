@@ -9,6 +9,7 @@ import 'src/app/providers.dart';
 import 'src/core/utils/logger.dart';
 import 'src/services/background/background_scheduler.dart';
 import 'src/services/notifications/notification_service.dart';
+import 'src/services/widgets/home_widget_service.dart';
 
 /// Entry point.
 ///
@@ -45,6 +46,7 @@ Future<void> main() async {
   // internally bounded to 8s and never throws, so start-up cannot hang on it.
   await deps.content.syncClientVersion();
 
+  await HomeWidgetService.init();
   await BackgroundScheduler.initialise();
   if (deps.canFetchShop) {
     await BackgroundScheduler.registerPeriodicCheck();
