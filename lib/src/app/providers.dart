@@ -253,6 +253,12 @@ class WishlistController extends Notifier<List<WishlistEntry>> {
     state = ref.read(wishlistRepositoryProvider).getAll();
   }
 
+  /// Undoes a [remove], restoring the entry's original position.
+  Future<void> restore(WishlistEntry entry) async {
+    await ref.read(wishlistRepositoryProvider).restore(entry);
+    state = ref.read(wishlistRepositoryProvider).getAll();
+  }
+
   bool contains(String skinUuid) =>
       state.any((WishlistEntry e) => e.skinUuid == skinUuid);
 }

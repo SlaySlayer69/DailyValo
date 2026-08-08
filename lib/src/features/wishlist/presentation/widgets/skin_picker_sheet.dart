@@ -10,6 +10,7 @@ import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../../../content/presentation/widgets/tier_badge.dart';
+import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 
 /// Searchable picker over the full skin catalogue.
 ///
@@ -189,8 +190,12 @@ class _SkinRow extends ConsumerWidget {
       borderRadius: AppRadius.card,
       child: InkWell(
         borderRadius: AppRadius.card,
-        onTap: () =>
-            ref.read(wishlistControllerProvider.notifier).toggle(skin),
+        // Tapping the row previews the skin, exactly as it does in the shop and
+        // the collection. It used to toggle the wishlist, which meant tapping a
+        // skin you had already added silently removed it — the opposite of what
+        // a tap does everywhere else in the app. Adding and removing is the
+        // heart's job, and only the heart's.
+        onTap: () => SkinDetailPage.open(context, skin: skin, tier: tier),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
@@ -225,14 +230,21 @@ class _SkinRow extends ConsumerWidget {
               ),
               TierBadge(tier: tier, compact: true),
               const SizedBox(width: AppSpacing.sm),
-              Icon(
-                isWishlisted
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                size: 20,
-                color: isWishlisted
-                    ? AppColors.accent
-                    : AppColors.textTertiary,
+              IconButton(
+                onPressed: () =>
+                    ref.read(wishlistControllerProvider.notifier).toggle(skin),
+                tooltip: isWishlisted
+                    ? 'Remove from wishlist'
+                    : 'Add to wishlist',
+                icon: Icon(
+                  isWishlisted
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  size: 20,
+                  color: isWishlisted
+                      ? AppColors.accent
+                      : AppColors.textTertiary,
+                ),
               ),
             ],
           ),

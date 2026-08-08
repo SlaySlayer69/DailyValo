@@ -39,6 +39,13 @@ class WishlistRepository {
 
   Future<void> remove(String skinUuid) => _store.deleteWishlistEntry(skinUuid);
 
+  /// Puts a removed entry back exactly as it was, keeping its original
+  /// `addedAt` so an undo restores its place in the list rather than jumping it
+  /// to the top. Takes the entry rather than a skin because undo has to work
+  /// when the catalogue is not loaded.
+  Future<void> restore(WishlistEntry entry) =>
+      _store.putWishlistEntry(entry.skinUuid, entry.toJson());
+
   /// Returns the entry's new state, so callers can drive a toggle without
   /// re-reading.
   Future<bool> toggle(WeaponSkin skin) async {

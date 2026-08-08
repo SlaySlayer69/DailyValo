@@ -151,14 +151,12 @@ class _WishlistTile extends ConsumerWidget {
         ),
         child: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
       ),
-      onDismissed: (DismissDirection _) {
-        ref.read(wishlistControllerProvider.notifier).remove(entry.skinUuid);
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(content: Text('${entry.skinName} removed')),
-          );
+      // Above the 0.4 default: a swipe has to be deliberate, because the
+      // gesture sits on top of a tap target whose job is to open the skin.
+      dismissThresholds: const <DismissDirection, double>{
+        DismissDirection.endToStart: 0.55,
       },
+      onDismissed: (DismissDirection _) => _remove(context, ref),
       child: Material(
         color: AppColors.surface,
         borderRadius: AppRadius.card,
@@ -223,9 +221,7 @@ class _WishlistTile extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => ref
-                      .read(wishlistControllerProvider.notifier)
-                      .remove(entry.skinUuid),
+                  onPressed: () => _remove(context, ref),
                   icon: const Icon(Icons.favorite_rounded, size: 20),
                   color: AppColors.accent,
                   tooltip: 'Remove from wishlist',
@@ -238,19 +234,60 @@ class _WishlistTile extends ConsumerWidget {
     );
   }
 
+  /// Removes the entry, with an undo.
+  ///
+  /// Both the heart and the swipe route through here. Removal is one tap next
+  /// to a tap target that opens the skin, so it has to be reversible — the
+  /// entry is restored with its original `addedAt`, keeping its place in the
+  /// list rather than jumping to the top.
+  void _remove(BuildContext context, WidgetRef ref) {
+    final WishlistEntry removed = entry;
+    ref.read(wishlistControllerProvider.notifier).remove(removed.skinUuid);
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${removed.skinName} removed'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => ref
+                .read(wishlistControllerProvider.notifier)
+                .restore(removed),
+          ),
+        ),
+      );
+  }
+
   /// Opens the full detail page, which needs the catalogue entry rather than
   /// the denormalised wishlist row.
+  ///
+  /// The wishlist renders from its own denormalised copy, so it can list a skin
+  /// the catalogue has not finished loading. Say so instead of letting the tap
+  /// do nothing at all — a tap that silently fails reads as a broken row, and
+  /// invites a second, harder tap.
   void _openDetail(BuildContext context, WidgetRef ref) {
-    final ContentCatalog? catalog = ref
-        .read(contentCatalogProvider)
-        .valueOrNull;
-    final WeaponSkin? skin = catalog?.skinByUuid(entry.skinUuid);
-    if (catalog == null || skin == null) return;
-
-    SkinDetailPage.open(
-      context,
-      skin: skin,
-      tier: catalog.tierOf(skin),
+    final AsyncValue<ContentCatalog> catalogAsync = ref.read(
+      contentCatalogProvider,
     );
+    final ContentCatalog? catalog = catalogAsync.valueOrNull;
+    final WeaponSkin? skin = catalog?.skinByUuid(entry.skinUuid);
+
+    if (skin != null && catalog != null) {
+      SkinDetailPage.open(context, skin: skin, tier: catalog.tierOf(skin));
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            catalog == null
+                ? 'Still loading the skin catalogue — try again in a moment.'
+                : 'No details available for ${entry.skinName} yet.',
+          ),
+        ),
+      );
   }
 }
