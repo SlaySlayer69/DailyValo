@@ -17,7 +17,7 @@ buzzes when something you are actually hunting for shows up.
 
 | Tab | What it does |
 | --- | --- |
-| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left. |
+| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
 | **Wishlist** | Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
 | **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those. |
@@ -74,7 +74,7 @@ digest that is no worse for being a few minutes late.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 144 unit tests, no device needed
+flutter test                # 152 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -281,7 +281,7 @@ afterwards.
 
 ## Testing
 
-144 unit tests, no device or network required:
+152 unit tests, no device or network required:
 
 ```
 test/
@@ -290,7 +290,7 @@ test/
 ├── shop_resolution_test.dart       Joining offers to names/owned/wishlist state
 ├── accessories_and_bundles_test.dart
 │                                   Accessory/bundle parsing, resolution,
-│                                   separate reset clocks, cache round trip
+│                                   bundle contents, separate reset clocks
 ├── wishlist_repository_test.dart   Hive persistence and shop matching
 ├── notification_format_test.dart   Locks in the two notification body formats
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing

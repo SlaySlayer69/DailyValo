@@ -1,0 +1,98 @@
+name: Generate a signing key
+
+# Creates the Android release keystore, once, without needing a computer.
+#
+# GitHub Actions cannot write repository secrets — only a human can — so this
+# hands you the four values to paste into
+# Settings ▸ Secrets and variables ▸ Actions.
+#
+# The key is uploaded as a private artifact and never printed to the log:
+# anyone who can read a workflow log could otherwise sign an APK that Android
+# would accept as an update to yours.
+#
+#   ⚠️ Download the artifact and keep it somewhere safe. If the key is lost,
+#   no future build can ever update an installed DailyValo — every user has to
+#   uninstall and lose their wishlist.
+
+on:
+  workflow_dispatch:
+    inputs:
+      validity_years:
+        description: 'How long the certificate stays valid.'
+        type: string
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Generate the keystore
+        id: gen
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          # Random passwords: nobody has to invent, remember or type these —
+          # they live in the repository secrets and nowhere else.
+          store_pass=$(openssl rand -base64 24 | tr -d '\n/+=' | head -c 32)
+          key_pass="$store_pass"
+
+          days=$(( ${{ inputs.validity_years }} * 365 ))
+
+          keytool -genkeypair -v \
+            -keystore out/dailyvalo-release.jks \
+            -storetype PKCS12 \
+            -keyalg RSA -keysize 2048 -validity "$days" \
+            -alias dailyvalo \
+            -storepass "$store_pass" -keypass "$key_pass" \
+            -dname "CN=DailyValo, OU=DailyValo, O=DailyValo, L=-, ST=-, C=DE"
+
+          base64 -w0 out/dailyvalo-release.jks > out/ANDROID_KEYSTORE_BASE64.txt
+          printf '%s' "$store_pass" > out/ANDROID_KEYSTORE_PASSWORD.txt
+          printf '%s' "dailyvalo"  > out/ANDROID_KEY_ALIAS.txt
+          printf '%s' "$key_pass"  > out/ANDROID_KEY_PASSWORD.txt
+
+          # Masked so an accidental `echo` later in the job cannot leak it.
+          echo "::add-mask::$store_pass"
+
+          {
+            echo '## Your signing key is ready'
+            echo
+            echo 'Download the **signing-key** artifact from this run. It holds'
+            echo 'the keystore and one text file per secret.'
+            echo
+            echo 'Then add four repository secrets under'
+            echo '*Settings ▸ Secrets and variables ▸ Actions*, pasting the'
+            echo 'contents of the matching file:'
+            echo
+            echo '| Secret | File |'
+            echo '| --- | --- |'
+            echo '| `ANDROID_KEYSTORE_BASE64` | `ANDROID_KEYSTORE_BASE64.txt` |'
+            echo '| `ANDROID_KEYSTORE_PASSWORD` | `ANDROID_KEYSTORE_PASSWORD.txt` |'
+            echo '| `ANDROID_KEY_ALIAS` | `ANDROID_KEY_ALIAS.txt` |'
+            echo '| `ANDROID_KEY_PASSWORD` | `ANDROID_KEY_PASSWORD.txt` |'
+            echo
+            echo '> ⚠️ **Keep `dailyvalo-release.jks` somewhere safe.** Lose it'
+            echo '> and no future build can ever update an installed DailyValo.'
+            echo '> This artifact expires, so download it now.'
+            echo
+            echo 'The first release signed with the new key still needs a'
+            echo 'one-time uninstall on any device carrying a debug-signed'
+            echo 'build. After that, updates work normally forever.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signing-key
+          path: out/
+          # Long enough to notice the run, short enough that a private key is
+          # not sitting in artifact storage indefinitely.
+          retention-days: 7

@@ -168,7 +168,7 @@ void main() {
       expect(bundle.discountedPrice, 6789);
       // Riot sends 0.2197 as a fraction; the UI wants whole percent.
       expect(bundle.discountPercent, 22);
-      expect(bundle.itemCount, 3);
+      expect(bundle.itemCount, 4);
       expect(bundle.endsAt, DateTime(2026, 8, 10, 12));
       expect(bundle.savings, 8700 - 6789);
     });
@@ -177,6 +177,81 @@ void main() {
       final StorefrontSnapshot snapshot = parse(withBundles: false);
       expect(snapshot.hasBundles, isFalse);
       expect(snapshot.bundles, isEmpty);
+    });
+
+    test('resolves contents, skins first, dropping what it cannot name', () {
+      final Shop shop = Shop.resolve(snapshot: parse(), catalog: catalog);
+      final BundleOffer bundle = shop.bundles.single;
+
+      // Four raw items, one of which the catalogue has never heard of.
+      expect(bundle.items, hasLength(3));
+      expect(bundle.hasItems, isTrue);
+
+      expect(
+        bundle.items.map((BundleItem i) => i.displayName).toList(),
+        <String>['Prime Vandal', 'Glitchpop Dagger', 'Neptune Card'],
+        reason: 'skins come before accessories regardless of Riot\'s order',
+      );
+
+      final BundleItem skin = bundle.items.first;
+      expect(skin.isPreviewable, isTrue, reason: 'a skin opens its detail page');
+      expect(skin.skin?.displayName, 'Prime Vandal');
+      expect(skin.tier?.devName, 'Premium');
+      expect(skin.subtitle, 'Vandal');
+      expect(skin.price, 2005);
+      expect(skin.isDiscounted, isTrue);
+
+      final BundleItem card = bundle.items.last;
+      expect(
+        card.isPreviewable,
+        isFalse,
+        reason: 'there is nothing behind an accessory to show',
+      );
+      expect(card.subtitle, 'Player Card');
+      expect(card.isFree, isTrue);
+    });
+
+    test('free items are free, not zero-priced', () {
+      final Shop shop = Shop.resolve(snapshot: parse(), catalog: catalog);
+      final BundleOffer bundle = shop.bundles.single;
+
+      expect(bundle.freeItems, hasLength(1));
+      expect(bundle.freeItems.single.displayName, 'Neptune Card');
+      expect(
+        bundle.freeItems.single.basePrice,
+        greaterThan(0),
+        reason: 'the struck-through price is what makes "free" mean something',
+      );
+    });
+
+    test('wholesale-only is carried through, since it changes the prices\' '
+        'meaning', () {
+      final Shop shop = Shop.resolve(
+        snapshot: StorefrontSnapshot(
+          dailyOffers: <RawOffer>[
+            RawOffer(offerId: Fixtures.primeVandalLevel1Uuid, cost: 1775),
+          ],
+          dailyResetAt: now,
+          nightMarketOffers: const <RawNightMarketOffer>[],
+          nightMarketEndsAt: null,
+          bundles: <RawBundleOffer>[
+            RawBundleOffer(
+              bundleUuid: Fixtures.protocolBundleUuid,
+              basePrice: 9900,
+              discountedPrice: 7100,
+              discountPercent: 28,
+              itemCount: 1,
+              endsAt: now.add(const Duration(days: 7)),
+              wholesaleOnly: true,
+            ),
+          ],
+          capturedAt: now,
+        ),
+        catalog: catalog,
+      );
+
+      expect(shop.bundles.single.wholesaleOnly, isTrue);
+      expect(shop.bundles.single.hasItems, isFalse);
     });
 
     test('resolves the bundle name and key art', () {
@@ -223,6 +298,38 @@ void main() {
       expect(bundle.isDiscounted, isFalse);
     });
 
+    test('parses each item with its own price', () {
+      final RawBundleOffer bundle = parse().bundles.single;
+
+      expect(bundle.items, hasLength(4));
+      expect(bundle.wholesaleOnly, isFalse);
+
+      final RawBundleItem first = bundle.items.first;
+      expect(first.itemId, Fixtures.primeVandalLevel1Uuid);
+      expect(first.basePrice, 2675);
+      expect(first.discountedPrice, 2005);
+      // Riot sends the per-item discount as a fraction, same as the total.
+      expect(first.discountPercent, 25);
+      expect(first.isFree, isFalse);
+
+      final RawBundleItem promo = bundle.items[2];
+      expect(promo.isPromoItem, isTrue);
+      expect(promo.isFree, isTrue);
+      expect(
+        promo.basePrice,
+        375,
+        reason: 'the giveaway still has a price when bought alone',
+      );
+    });
+
+    test('bundle item prices are plain numbers, not currency maps', () {
+      // The rest of the storefront prices things as {currency-uuid: amount};
+      // bundle items do not, and reading them the same way would zero them all.
+      final RawBundleItem item = parse().bundles.single.items.first;
+      expect(item.basePrice, isNot(0));
+      expect(item.discountedPrice, isNot(0));
+    });
+
     test('never reports a negative countdown', () {
       final BundleOffer expired = BundleOffer(
         uuid: 'x',
@@ -254,6 +361,19 @@ void main() {
       expect(
         restored.bundles.single.discountedPrice,
         original.bundles.single.discountedPrice,
+      );
+
+      // The worker persists snapshots; losing the contents would mean an
+      // offline bundle page with nothing in it.
+      expect(restored.bundles.single.items, hasLength(4));
+      expect(
+        restored.bundles.single.items.first.itemId,
+        Fixtures.primeVandalLevel1Uuid,
+      );
+      expect(restored.bundles.single.items[2].isPromoItem, isTrue);
+      expect(
+        restored.bundles.single.wholesaleOnly,
+        original.bundles.single.wholesaleOnly,
       );
     });
 

@@ -164,19 +164,85 @@ class DemoStoreSource {
     if (pool.isEmpty) return const <RawBundleOffer>[];
 
     final BundleInfo bundle = pool[random.nextInt(pool.length)];
-    const int base = 8700;
-    const int discounted = 6789;
+    final List<RawBundleItem> items = _buildBundleItems(catalog, random);
+
+    // Derived from the items rather than hard-coded, so the detail page adds up
+    // — a bundle whose parts do not sum to its price is the first thing anyone
+    // would notice.
+    final int base = items.fold(
+      0,
+      (int sum, RawBundleItem i) => sum + i.basePrice,
+    );
+    final int discounted = items.fold(
+      0,
+      (int sum, RawBundleItem i) => sum + i.discountedPrice,
+    );
+
     return <RawBundleOffer>[
       RawBundleOffer(
         bundleUuid: bundle.uuid,
         basePrice: base,
         discountedPrice: discounted,
-        discountPercent: ((base - discounted) * 100 / base).round(),
-        itemCount: 5,
+        discountPercent: base == 0
+            ? 0
+            : ((base - discounted) * 100 / base).round(),
+        itemCount: items.length,
         endsAt: now.add(const Duration(days: 9, hours: 4)),
+        items: items,
+        // Riot's own bundles are mostly breakable; showing the more common case
+        // means the demo matches what a real account usually sees.
+        wholesaleOnly: false,
       ),
     ];
   }
+
+  /// Four skins at a bundle discount, plus a free accessory if one is known.
+  List<RawBundleItem> _buildBundleItems(
+    ContentCatalog catalog,
+    Random random,
+  ) {
+    final List<WeaponSkin> pool = catalog.purchasableSkins;
+    if (pool.isEmpty) return const <RawBundleItem>[];
+
+    final List<RawBundleItem> items = <RawBundleItem>[];
+    for (final WeaponSkin skin in _pick(pool, min(4, pool.length), random)) {
+      final int base = priceFor(catalog.tierOf(skin));
+      items.add(
+        RawBundleItem(
+          itemTypeId: _skinLevelTypeId,
+          itemId: skin.offerUuid,
+          basePrice: base,
+          // Riot's bundle discount lands around 20–25% per item.
+          discountedPrice: (base * 0.78).round(),
+          discountPercent: 22,
+        ),
+      );
+    }
+
+    // The giveaway item — always priced at zero, which is what makes the
+    // "free in bundle" path visible without a Riot account.
+    final AccessoryItem? extra = catalog.accessories.values
+        .where((AccessoryItem a) => a.kind == AccessoryKind.playerCard)
+        .firstOrNull;
+    if (extra != null) {
+      items.add(
+        RawBundleItem(
+          itemTypeId: AccessoryKind.playerCardTypeId,
+          itemId: extra.uuid,
+          basePrice: 375,
+          discountedPrice: 0,
+          discountPercent: 100,
+          isPromoItem: true,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  /// Riot's `ItemTypeID` for a weapon skin level, as bundles report it.
+  static const String _skinLevelTypeId =
+      'e7c63390-eda7-46e0-bb7a-a6abdacd2433';
 
   List<RawNightMarketOffer> _buildNightMarket(
     ContentCatalog catalog,

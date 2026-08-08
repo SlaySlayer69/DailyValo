@@ -315,9 +315,38 @@ abstract final class Fixtures {
             'DataAssetID': protocolBundleUuid,
             'CurrencyID': _vpUuid,
             'Items': <Map<String, dynamic>>[
-              <String, dynamic>{'Item': <String, dynamic>{}},
-              <String, dynamic>{'Item': <String, dynamic>{}},
-              <String, dynamic>{'Item': <String, dynamic>{}},
+              // A skin, granted by its level uuid, discounted.
+              _bundleItem(
+                itemTypeId: _skinLevelTypeId,
+                itemId: primeVandalLevel1Uuid,
+                basePrice: 2675,
+                discountedPrice: 2005,
+                discountPercent: 0.25,
+              ),
+              _bundleItem(
+                itemTypeId: _skinLevelTypeId,
+                itemId: glitchpopKnifeLevel1Uuid,
+                basePrice: 4950,
+                discountedPrice: 3712,
+                discountPercent: 0.25,
+              ),
+              // The giveaway: a card at zero.
+              _bundleItem(
+                itemTypeId: AccessoryKind.playerCardTypeId,
+                itemId: playerCardUuid,
+                basePrice: 375,
+                discountedPrice: 0,
+                discountPercent: 1,
+                isPromoItem: true,
+              ),
+              // Something the catalogue has never heard of.
+              _bundleItem(
+                itemTypeId: _skinLevelTypeId,
+                itemId: 'shipped-in-todays-patch',
+                basePrice: 1775,
+                discountedPrice: 1331,
+                discountPercent: 0.25,
+              ),
             ],
             'DurationRemainingInSeconds': 259200,
             'TotalBaseCost': <String, dynamic>{_vpUuid: 8700},
@@ -351,6 +380,31 @@ abstract final class Fixtures {
     },
     'ContractID': 'y1s1-accessory-contract',
   };
+
+  /// One entry of a bundle's `Items` array. Note the prices are plain numbers
+  /// here, unlike the currency maps the rest of the storefront uses.
+  static Map<String, dynamic> _bundleItem({
+    required String itemTypeId,
+    required String itemId,
+    required int basePrice,
+    required int discountedPrice,
+    required num discountPercent,
+    bool isPromoItem = false,
+  }) => <String, dynamic>{
+    'Item': <String, dynamic>{
+      'ItemTypeID': itemTypeId,
+      'ItemID': itemId,
+      'Amount': 1,
+    },
+    'BasePrice': basePrice,
+    'CurrencyID': _vpUuid,
+    'DiscountPercent': discountPercent,
+    'DiscountedPrice': discountedPrice,
+    'IsPromoItem': isPromoItem,
+  };
+
+  static const String _skinLevelTypeId =
+      'e7c63390-eda7-46e0-bb7a-a6abdacd2433';
 
   static const String _vpUuid = '85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741';
   static const String _kcUuid = '85ca954a-41f2-ce94-9b45-8ca3dd39a00d';

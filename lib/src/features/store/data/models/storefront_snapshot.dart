@@ -113,6 +113,64 @@ class RawAccessoryOffer {
       );
 }
 
+/// One entry inside a Featured Bundle.
+///
+/// Bundles price each item separately, which is the only way to answer the two
+/// questions worth asking about a bundle: what is actually in it, and which
+/// parts are thrown in for nothing.
+class RawBundleItem {
+  const RawBundleItem({
+    required this.itemTypeId,
+    required this.itemId,
+    required this.basePrice,
+    required this.discountedPrice,
+    this.amount = 1,
+    this.discountPercent = 0,
+    this.isPromoItem = false,
+  });
+
+  /// Riot's `ItemTypeID` — a skin level, a spray, a buddy, a card, a title.
+  final String itemTypeId;
+
+  /// The uuid to resolve against the catalogue.
+  final String itemId;
+
+  /// What the item costs on its own, outside the bundle.
+  final int basePrice;
+
+  /// What it costs as part of this bundle. Zero for the promo item Riot throws
+  /// in — which is worth showing as *free*, not as "0 VP".
+  final int discountedPrice;
+
+  final int amount;
+  final int discountPercent;
+
+  /// Riot's own flag for the giveaway item.
+  final bool isPromoItem;
+
+  bool get isFree => discountedPrice == 0;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'itemTypeId': itemTypeId,
+    'itemId': itemId,
+    'basePrice': basePrice,
+    'discountedPrice': discountedPrice,
+    'amount': amount,
+    'discountPercent': discountPercent,
+    'isPromoItem': isPromoItem,
+  };
+
+  factory RawBundleItem.fromJson(Map<String, dynamic> json) => RawBundleItem(
+    itemTypeId: json['itemTypeId'] as String? ?? '',
+    itemId: json['itemId'] as String? ?? '',
+    basePrice: (json['basePrice'] as num?)?.toInt() ?? 0,
+    discountedPrice: (json['discountedPrice'] as num?)?.toInt() ?? 0,
+    amount: (json['amount'] as num?)?.toInt() ?? 1,
+    discountPercent: (json['discountPercent'] as num?)?.toInt() ?? 0,
+    isPromoItem: json['isPromoItem'] as bool? ?? false,
+  );
+}
+
 /// A Featured Bundle as the storefront describes it.
 class RawBundleOffer {
   const RawBundleOffer({
@@ -122,6 +180,8 @@ class RawBundleOffer {
     required this.discountPercent,
     required this.itemCount,
     required this.endsAt,
+    this.items = const <RawBundleItem>[],
+    this.wholesaleOnly = false,
   });
 
   /// `DataAssetID` — the uuid that matches valorant-api's bundle content.
@@ -138,6 +198,14 @@ class RawBundleOffer {
   /// Absolute time the bundle leaves the shop.
   final DateTime endsAt;
 
+  /// What is in the bundle, each with its own price.
+  final List<RawBundleItem> items;
+
+  /// True when Riot sells the bundle only as a whole — no picking one skin out
+  /// of it. This is the single most useful thing to know before opening the
+  /// store, and it varies bundle to bundle.
+  final bool wholesaleOnly;
+
   int get savings => basePrice - discountedPrice;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -147,6 +215,8 @@ class RawBundleOffer {
     'discountPercent': discountPercent,
     'itemCount': itemCount,
     'endsAt': endsAt.toIso8601String(),
+    'items': items.map((RawBundleItem i) => i.toJson()).toList(),
+    'wholesaleOnly': wholesaleOnly,
   };
 
   factory RawBundleOffer.fromJson(Map<String, dynamic> json) => RawBundleOffer(
@@ -157,6 +227,13 @@ class RawBundleOffer {
     itemCount: (json['itemCount'] as num?)?.toInt() ?? 0,
     endsAt:
         DateTime.tryParse(json['endsAt'] as String? ?? '') ?? DateTime.now(),
+    items:
+        (json['items'] as List<dynamic>?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(RawBundleItem.fromJson)
+            .toList(growable: false) ??
+        const <RawBundleItem>[],
+    wholesaleOnly: json['wholesaleOnly'] as bool? ?? false,
   );
 }
 
