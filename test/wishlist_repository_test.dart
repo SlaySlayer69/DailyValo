@@ -41,6 +41,49 @@ void main() {
       expect(wishlist.getAll(), isEmpty);
     });
 
+    test('restore puts a removed entry back where it was', () async {
+      // The list is newest-first and an undo must not promote the restored
+      // skin. The timestamp is explicit because two `add` calls in a row can
+      // land in the same microsecond, which would make the ordering assertion
+      // a race rather than a check.
+      final WishlistEntry older = WishlistEntry(
+        skinUuid: Fixtures.primeVandalSkinUuid,
+        offerUuid: Fixtures.primeVandalLevel1Uuid,
+        skinName: 'Prime Vandal',
+        weaponName: 'Vandal',
+        addedAt: DateTime(2026, 8, 1),
+      );
+      await wishlist.restore(older);
+      await wishlist.add(Fixtures.glitchpopKnife());
+
+      expect(wishlist.getAll().last.skinName, 'Prime Vandal');
+
+      await wishlist.remove(older.skinUuid);
+      expect(wishlist.getAll(), hasLength(1));
+
+      await wishlist.restore(older);
+      final List<WishlistEntry> restored = wishlist.getAll();
+      expect(restored, hasLength(2));
+      expect(
+        restored.last.skinName,
+        'Prime Vandal',
+        reason: 'the original addedAt is kept, so it stays the older entry',
+      );
+      expect(restored.last.addedAt, older.addedAt);
+      expect(restored.last.offerUuid, Fixtures.primeVandalLevel1Uuid);
+    });
+
+    test('restore is idempotent, so a double undo cannot duplicate', () async {
+      await wishlist.add(Fixtures.primeVandal());
+      final WishlistEntry entry = wishlist.getAll().single;
+
+      await wishlist.remove(entry.skinUuid);
+      await wishlist.restore(entry);
+      await wishlist.restore(entry);
+
+      expect(wishlist.getAll(), hasLength(1));
+    });
+
     test('adding the same skin twice does not duplicate it', () async {
       await wishlist.add(Fixtures.primeVandal());
       await wishlist.add(Fixtures.primeVandal());
