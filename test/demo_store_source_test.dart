@@ -127,6 +127,49 @@ void main() {
       expect(bundle.endsAt.isAfter(snapshot.dailyResetAt), isTrue);
     });
 
+    test('the demo bundle\'s items add up to its price', () {
+      // A bundle whose parts do not sum to its total is the first thing anyone
+      // would notice on the detail page.
+      final RawBundleOffer bundle = demo.buildStorefront(catalog).bundles.single;
+
+      expect(bundle.items, isNotEmpty);
+      expect(bundle.itemCount, bundle.items.length);
+      expect(
+        bundle.items.fold(0, (int s, RawBundleItem i) => s + i.basePrice),
+        bundle.basePrice,
+      );
+      expect(
+        bundle.items.fold(0, (int s, RawBundleItem i) => s + i.discountedPrice),
+        bundle.discountedPrice,
+      );
+    });
+
+    test('the demo bundle includes one free item', () {
+      final RawBundleOffer bundle = demo.buildStorefront(catalog).bundles.single;
+      final Iterable<RawBundleItem> free = bundle.items.where(
+        (RawBundleItem i) => i.isFree,
+      );
+
+      expect(free, hasLength(1));
+      expect(free.single.isPromoItem, isTrue);
+      expect(
+        free.single.basePrice,
+        greaterThan(0),
+        reason: 'without a base price there is nothing to strike through',
+      );
+    });
+
+    test('every demo bundle item resolves against the catalogue', () {
+      final RawBundleOffer bundle = demo.buildStorefront(catalog).bundles.single;
+
+      for (final RawBundleItem item in bundle.items) {
+        final bool resolves =
+            catalog.skinByOfferUuid(item.itemId) != null ||
+            catalog.accessoryByUuid(item.itemId) != null;
+        expect(resolves, isTrue, reason: '${item.itemId} resolved to nothing');
+      }
+    });
+
     test('handles an empty catalogue without throwing', () {
       final ContentCatalog empty = ContentCatalog(
         skins: const <WeaponSkin>[],

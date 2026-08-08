@@ -17,28 +17,48 @@ Until a key is configured, builds fall back to the per-machine debug key, and
 every machine produces a mutually incompatible APK. One real key, held by CI,
 fixes that permanently.
 
-Generate it once, on a machine you trust:
+A build with no key configured falls back to a debug key, and on a CI runner
+that key is generated fresh for every job — so two debug-signed releases cannot
+update *each other* either. That is why the Release workflow refuses to publish
+one unless the run explicitly ticks **Publish a test build**.
+
+### Generating it from a phone
+
+*Actions ▸ Generate a signing key ▸ Run workflow.* It creates the keystore and
+uploads it as a private artifact — the key is never printed to the log, because
+anyone able to read a workflow log could otherwise sign an APK that Android
+would accept as an update to yours.
+
+Download the **signing-key** artifact, then add four repository secrets under
+*Settings ▸ Secrets and variables ▸ Actions*, pasting the contents of the
+matching file:
+
+| Secret | File in the artifact |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `ANDROID_KEYSTORE_BASE64.txt` |
+| `ANDROID_KEYSTORE_PASSWORD` | `ANDROID_KEYSTORE_PASSWORD.txt` |
+| `ANDROID_KEY_ALIAS` | `ANDROID_KEY_ALIAS.txt` |
+| `ANDROID_KEY_PASSWORD` | `ANDROID_KEY_PASSWORD.txt` |
+
+**Keep `dailyvalo-release.jks` somewhere safe and backed up.** If it is lost, no
+future build can ever update an installed DailyValo — every user has to
+uninstall and lose their wishlist. The artifact expires after seven days.
+
+### Generating it on a computer instead
 
 ```bash
-keytool -genkey -v -keystore dailyvalo-release.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 -alias dailyvalo
+keytool -genkeypair -v -keystore dailyvalo-release.jks -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10950 -alias dailyvalo
+base64 -w0 dailyvalo-release.jks   # the value for ANDROID_KEYSTORE_BASE64
 ```
 
-Keep that file and its passwords somewhere safe and backed up. **If it is lost,
-no future build can ever upgrade an installed DailyValo.**
+Then add the same four secrets.
 
-Then add four repository secrets under *Settings ▸ Secrets and variables ▸
-Actions*:
+### After the switch
 
-| Secret | Value |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 dailyvalo-release.jks` |
-| `ANDROID_KEYSTORE_PASSWORD` | the store password |
-| `ANDROID_KEY_ALIAS` | `dailyvalo` |
-| `ANDROID_KEY_PASSWORD` | the key password |
-
-The first release signed with the new key still needs a manual uninstall on any
-device that has a debug-signed build on it. That happens once.
+The first release signed with the new key still needs a one-time uninstall on
+any device carrying a debug-signed build. After that, updates work normally and
+the warning disappears from the release notes by itself.
 
 ### Building signed APKs locally
 
@@ -78,8 +98,12 @@ is nothing to do first on a machine with git on it.
 Either path runs the same job: it checks the version against `pubspec.yaml`,
 tags the commit if it is not tagged already, runs `flutter analyze` and the
 tests, builds the three APKs, and publishes them with the changelog section as
-the body. A version mismatch or a failing test stops the release rather than
-shipping.
+the body. A version mismatch, a failing test, or a missing signing key stops the
+release rather than shipping.
+
+Ticking **Publish a test build** allows a release with no signing key. Use it
+for something you only want to try on your own phone — the resulting APK cannot
+update any other install, and its release notes say so.
 
 The version check runs *before* the tag is created, so a mistyped version fails
 without leaving a stray tag behind — retrying after fixing `pubspec.yaml` is

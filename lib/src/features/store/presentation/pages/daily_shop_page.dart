@@ -11,6 +11,7 @@ import '../../data/models/shop.dart';
 import '../widgets/accessory_card.dart';
 import '../widgets/bundle_card.dart';
 import '../widgets/skin_card.dart';
+import 'bundle_detail_page.dart';
 
 /// Tab 1 — the four daily offers and the countdown to the next rotation.
 class DailyShopPage extends ConsumerWidget {
@@ -146,6 +147,7 @@ class _ShopContent extends ConsumerWidget {
           for (final BundleOffer bundle in shop.bundles) ...<Widget>[
             BundleCard(
               bundle: bundle,
+              onTap: () => BundleDetailPage.open(context, bundle: bundle),
               onExpired: () =>
                   ref.read(shopControllerProvider.notifier).refresh(),
             ),
@@ -188,11 +190,7 @@ class _WishlistBanner extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          const Icon(
-            Icons.favorite_rounded,
-            color: AppColors.accent,
-            size: 20,
-          ),
+          const Icon(Icons.favorite_rounded, color: AppColors.accent, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(

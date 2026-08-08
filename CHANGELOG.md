@@ -4,6 +4,24 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v2.2.1
+
+**Featured Bundles open up.** Tap a bundle to see what is actually in it: every
+skin and accessory with its own price, what each one costs on its own, and which
+item Riot throws in for free. The page says up front whether you can buy items
+separately or only the complete bundle — it varies per bundle and changes what
+the prices mean.
+
+Tapping a weapon or melee skin in the list opens the same detail page as the
+daily shop, with the full render, chromas and preview clips.
+
+**Release builds are properly signed.** Releases without a signing key are no
+longer published by accident. They were signed with a throwaway key generated
+per build, which meant no release could ever update another — you had to
+uninstall and lose your wishlist every time. Publishing an unsigned test build
+is now a deliberate choice, and a new workflow generates a real signing key
+without needing a computer.
+
 ## v2.2.0
 
 **Notification time.** A new setting lets you pick when your notifications

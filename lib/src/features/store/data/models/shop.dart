@@ -91,6 +91,62 @@ class AccessoryOffer {
       items.length == 1 ? primary.kind.label : '${items.length} items';
 }
 
+/// One resolved item inside a bundle.
+///
+/// A bundle mixes weapon skins with sprays, buddies, cards and titles, so this
+/// holds either — whichever the uuid resolved to. A skin carries its full
+/// catalogue entry, which is what makes the row openable into the same detail
+/// page the shop uses.
+class BundleItem {
+  const BundleItem({
+    required this.itemId,
+    required this.basePrice,
+    required this.price,
+    this.skin,
+    this.tier,
+    this.accessory,
+    this.amount = 1,
+    this.isPromoItem = false,
+  });
+
+  final String itemId;
+
+  /// Price on its own, outside the bundle.
+  final int basePrice;
+
+  /// Price as part of this bundle.
+  final int price;
+
+  /// Set when the item is a weapon or melee skin — the only kind with artwork,
+  /// chromas and preview clips worth opening.
+  final WeaponSkin? skin;
+  final ContentTier? tier;
+
+  /// Set when the item is a spray, buddy, card or title.
+  final AccessoryItem? accessory;
+
+  final int amount;
+  final bool isPromoItem;
+
+  /// Riot throws one item in for nothing. "Free" is the honest word for it;
+  /// "0 VP" reads like a price.
+  bool get isFree => price == 0;
+
+  bool get isDiscounted => price < basePrice;
+
+  /// True when there is a detail page worth opening.
+  bool get isPreviewable => skin != null;
+
+  String get displayName =>
+      skin?.displayName ?? accessory?.displayName ?? 'Unknown item';
+
+  /// `Vandal` / `Spray` / `Gun Buddy` — what kind of thing this is.
+  String get subtitle =>
+      skin?.weaponName ?? accessory?.kind.label ?? 'Bundle item';
+
+  String? get artwork => skin?.displayIcon ?? skin?.artwork ?? accessory?.artwork;
+}
+
 /// A Featured Bundle with its artwork and name resolved.
 class BundleOffer {
   const BundleOffer({
@@ -101,6 +157,8 @@ class BundleOffer {
     required this.itemCount,
     required this.endsAt,
     this.info,
+    this.items = const <BundleItem>[],
+    this.wholesaleOnly = false,
   });
 
   final String uuid;
@@ -116,6 +174,19 @@ class BundleOffer {
   /// Null when the catalogue does not know this bundle yet, which happens for
   /// a day or two after Riot ships a new one.
   final BundleInfo? info;
+
+  /// What is in the bundle, skins first — they are what anyone opens a bundle
+  /// to look at, and the accessories are padding by comparison.
+  final List<BundleItem> items;
+
+  /// True when the bundle can only be bought whole.
+  final bool wholesaleOnly;
+
+  bool get hasItems => items.isNotEmpty;
+
+  /// Items thrown in for nothing.
+  List<BundleItem> get freeItems =>
+      items.where((BundleItem i) => i.isFree).toList(growable: false);
 
   String get displayName => info?.displayName ?? 'Featured Bundle';
 
@@ -255,6 +326,8 @@ class Shop {
             itemCount: raw.itemCount,
             endsAt: raw.endsAt,
             info: catalog.bundleByUuid(raw.bundleUuid),
+            items: _resolveBundleItems(raw.items, catalog),
+            wholesaleOnly: raw.wholesaleOnly,
           ),
         )
         .toList(growable: false);
@@ -269,5 +342,57 @@ class Shop {
       bundles: bundles,
       capturedAt: snapshot.capturedAt,
     );
+  }
+
+  /// Resolves a bundle's contents, skins first.
+  ///
+  /// The uuid is tried as a skin before an accessory rather than trusting
+  /// `ItemTypeID`: Riot uses several type ids for skin-shaped things (a level,
+  /// a chroma), the catalogue already indexes all of them, and a lookup that
+  /// succeeds is better evidence than a type id we would have to keep a list
+  /// of. Unresolvable items are dropped — a row with no name and no picture
+  /// tells the reader nothing.
+  ///
+  /// Skins are listed first because they are what anyone opens a bundle to
+  /// look at; the sprays and cards are padding by comparison.
+  static List<BundleItem> _resolveBundleItems(
+    List<RawBundleItem> raw,
+    ContentCatalog catalog,
+  ) {
+    final List<BundleItem> skins = <BundleItem>[];
+    final List<BundleItem> extras = <BundleItem>[];
+
+    for (final RawBundleItem item in raw) {
+      final WeaponSkin? skin = catalog.skinByOfferUuid(item.itemId);
+      if (skin != null) {
+        skins.add(
+          BundleItem(
+            itemId: item.itemId,
+            basePrice: item.basePrice,
+            price: item.discountedPrice,
+            skin: skin,
+            tier: catalog.tierOf(skin),
+            amount: item.amount,
+            isPromoItem: item.isPromoItem,
+          ),
+        );
+        continue;
+      }
+
+      final AccessoryItem? accessory = catalog.accessoryByUuid(item.itemId);
+      if (accessory == null) continue;
+      extras.add(
+        BundleItem(
+          itemId: item.itemId,
+          basePrice: item.basePrice,
+          price: item.discountedPrice,
+          accessory: accessory,
+          amount: item.amount,
+          isPromoItem: item.isPromoItem,
+        ),
+      );
+    }
+
+    return <BundleItem>[...skins, ...extras];
   }
 }

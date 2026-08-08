@@ -113,7 +113,7 @@ abstract final class StorefrontParser {
           bundle['DataAssetID'] as String? ?? bundle['ID'] as String?;
       if (uuid == null) continue;
 
-      final Object? items = bundle['Items'];
+      final List<RawBundleItem> items = _parseBundleItems(bundle['Items']);
       final int seconds =
           (bundle['DurationRemainingInSeconds'] as num?)?.toInt() ??
           (featured['BundleRemainingDurationInSeconds'] as num?)?.toInt() ??
@@ -130,8 +130,43 @@ abstract final class StorefrontParser {
           discountPercent: fraction == null
               ? 0
               : (fraction * 100).round().clamp(0, 100),
-          itemCount: items is List ? items.length : 0,
+          itemCount: items.length,
           endsAt: now.add(Duration(seconds: seconds)),
+          items: items,
+          wholesaleOnly: bundle['WholesaleOnly'] as bool? ?? false,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static List<RawBundleItem> _parseBundleItems(Object? raw) {
+    if (raw is! List) return const <RawBundleItem>[];
+
+    final List<RawBundleItem> out = <RawBundleItem>[];
+    for (final Object? entry in raw) {
+      final Map<String, dynamic> row = _asMap(entry);
+      // The identifying fields sit one level down, under `Item`; the pricing
+      // sits on the row itself.
+      final Map<String, dynamic> item = _asMap(row['Item']);
+      final String? itemId = item['ItemID'] as String?;
+      if (itemId == null || itemId.isEmpty) continue;
+
+      final num? fraction = row['DiscountPercent'] as num?;
+
+      out.add(
+        RawBundleItem(
+          itemTypeId: item['ItemTypeID'] as String? ?? '',
+          itemId: itemId,
+          amount: (item['Amount'] as num?)?.toInt() ?? 1,
+          basePrice: (row['BasePrice'] as num?)?.toInt() ?? 0,
+          // A bundle item's price is a plain number, not the currency map the
+          // rest of the storefront uses — the currency is on the row instead.
+          discountedPrice: (row['DiscountedPrice'] as num?)?.toInt() ?? 0,
+          discountPercent: fraction == null
+              ? 0
+              : (fraction * 100).round().clamp(0, 100),
+          isPromoItem: row['IsPromoItem'] as bool? ?? false,
         ),
       );
     }
