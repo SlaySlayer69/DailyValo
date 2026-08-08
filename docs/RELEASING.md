@@ -71,12 +71,19 @@ git push origin v2.2.0
 ```
 
 **From a phone** — GitHub mobile app or the site: *Actions ▸ Release ▸ Run
-workflow*, enter `v2.2.0`.
+workflow*, enter `v2.2.0`. **The tag does not need to exist**; the workflow cuts
+it from the current default branch. That is the whole point of this path — there
+is nothing to do first on a machine with git on it.
 
-Either path runs the same job: it checks the tag against `pubspec.yaml`, runs
-`flutter analyze` and the tests, builds the three APKs, and publishes them with
-the changelog section as the body. A version mismatch or a failing test stops
-the release rather than shipping.
+Either path runs the same job: it checks the version against `pubspec.yaml`,
+tags the commit if it is not tagged already, runs `flutter analyze` and the
+tests, builds the three APKs, and publishes them with the changelog section as
+the body. A version mismatch or a failing test stops the release rather than
+shipping.
+
+The version check runs *before* the tag is created, so a mistyped version fails
+without leaving a stray tag behind — retrying after fixing `pubspec.yaml` is
+just pressing the button again.
 
 ---
 

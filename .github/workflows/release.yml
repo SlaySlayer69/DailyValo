@@ -33,12 +33,55 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "number=${tag#v}" >> "$GITHUB_OUTPUT"
 
+      # Checks out the default branch, not the tag: on a manual run the tag
+      # usually does not exist yet, and asking for it here fails the job before
+      # anything can create it. The next step tags and then moves onto it.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.version.outputs.tag }}
-          # The changelog lives on the default branch and may have gained the
-          # entry for this version after the tag was cut.
           fetch-depth: 0
+
+      # Deliberately before the tag is created: a mistyped version on a manual
+      # run would otherwise leave a stray tag behind on a job that then failed,
+      # and the second attempt would "already exist" pointing at nothing useful.
+      - name: Check the version matches the tag
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+
+          # From the tag when it exists, from the commit about to be tagged
+          # when it does not.
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            git show "$tag:pubspec.yaml" > /tmp/pubspec.yaml
+          else
+            cp pubspec.yaml /tmp/pubspec.yaml
+          fi
+
+          declared=$(grep '^version:' /tmp/pubspec.yaml | sed 's/version: *//; s/+.*//')
+          if [ "$declared" != "${{ steps.version.outputs.number }}" ]; then
+            echo "::error::pubspec.yaml says $declared but the tag says \
+          ${{ steps.version.outputs.number }}. Bump one of them."
+            exit 1
+          fi
+
+      - name: Tag this commit if the tag does not exist yet
+        run: |
+          tag='${{ steps.version.outputs.tag }}'
+
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; releasing exactly that commit."
+          else
+            # Manual runs are the whole point of the phone path: pick a version,
+            # press the button. Cutting the tag here is what makes that work
+            # without a machine with git on it.
+            git config user.name  'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git tag -a "$tag" -m "DailyValo $tag"
+            git push origin "refs/tags/$tag"
+            echo "tagged $(git rev-parse --short HEAD) as $tag"
+          fi
+
+          # Build from the tag either way, so a release is always exactly what
+          # its tag points at — even if the branch moved on in the meantime.
+          git checkout --detach "$tag"
 
       - uses: subosito/flutter-action@v2
         with:
@@ -52,15 +95,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Check the version matches the tag
-        run: |
-          declared=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
-          if [ "$declared" != "${{ steps.version.outputs.number }}" ]; then
-            echo "::error::pubspec.yaml says $declared but the tag says \
-          ${{ steps.version.outputs.number }}. Bump one of them."
-            exit 1
-          fi
 
       - run: flutter pub get
       - run: flutter analyze
