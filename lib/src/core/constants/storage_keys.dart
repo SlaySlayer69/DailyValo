@@ -45,5 +45,13 @@ abstract final class SettingKeys {
   static const String demoMode = 'demoMode';
   static const String shopNotificationsEnabled = 'notify.shop';
   static const String wishlistNotificationsEnabled = 'notify.wishlist';
+
+  /// Hold notifications back to a chosen time of day instead of firing them
+  /// as soon as the shop rotation is noticed.
+  static const String notifyAtFixedTime = 'notify.atFixedTime';
+
+  /// Minutes since local midnight — see [NotificationSchedule].
+  static const String notifyTimeOfDay = 'notify.timeOfDay';
+
   static const String language = 'language';
 }

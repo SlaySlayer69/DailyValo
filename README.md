@@ -19,8 +19,8 @@ buzzes when something you are actually hunting for shows up.
 | --- | --- |
 | **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
-| **Wishlist** | Searchable picker over the full skin catalogue; entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
-| **Collection** | Every skin you own, grouped and counted by rarity. |
+| **Wishlist** | Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
+| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those. |
 
 Everywhere: a persistent header with your Riot ID, competitive rank, and your
 Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
@@ -56,6 +56,17 @@ Separate channels mean a user can silence the daily digest and keep the
 wishlist alert from Android's own settings, with no in-app toggle required
 (though there are toggles too, under the header's ⋮ menu).
 
+**Delivery time.** By default both fire as soon as the rotation is noticed,
+which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
+*Notification time* holds them back to an hour you pick. Detection still happens
+at reset — only the delivery moves, and nothing about the shop changes in
+between, so a held notification is still correct when it arrives. The alarm is
+handed to Android via `zonedSchedule` rather than waking a worker at the chosen
+hour: the OS delivers it whether or not the app gets scheduled, and it survives
+a reboot. It is deliberately an *inexact* alarm — exact ones need
+`SCHEDULE_EXACT_ALARM`, a restricted permission, which is a heavy ask for a shop
+digest that is no worse for being a few minutes late.
+
 ---
 
 ## Getting started
@@ -63,7 +74,7 @@ wishlist alert from Android's own settings, with no in-app toggle required
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 121 unit tests, no device needed
+flutter test                # 144 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -270,7 +281,7 @@ afterwards.
 
 ## Testing
 
-121 unit tests, no device or network required:
+144 unit tests, no device or network required:
 
 ```
 test/

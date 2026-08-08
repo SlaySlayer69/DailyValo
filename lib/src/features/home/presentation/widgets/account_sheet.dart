@@ -8,6 +8,7 @@ import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../services/background/shop_sync_service.dart';
 import '../../../../services/diagnostics/connection_diagnostics.dart';
+import '../../../../services/notifications/notification_schedule.dart';
 import '../../../../services/notifications/notification_service.dart';
 
 /// Account and notification settings, reached from the header.
@@ -50,6 +51,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       SettingKeys.wishlistNotificationsEnabled,
       true,
     );
+    final NotificationSchedule schedule = NotificationSchedule.read(store);
 
     return SafeArea(
       // The sheet sizes itself to the content, but a small screen or a large
@@ -96,6 +98,32 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               ),
               contentPadding: EdgeInsets.zero,
             ),
+
+            SwitchListTile.adaptive(
+              value: schedule.enabled,
+              onChanged: (bool value) =>
+                  _setSetting(SettingKeys.notifyAtFixedTime, value),
+              title: const Text('Notification time'),
+              subtitle: Text(
+                schedule.enabled
+                    ? 'Both notifications arrive at ${schedule.label}'
+                    : 'Both notifications arrive at shop reset (00:00 UTC)',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            // Only meaningful while the toggle is on, so it appears with it
+            // rather than sitting there greyed out.
+            if (schedule.enabled)
+              ListTile(
+                onTap: () => _pickTime(schedule),
+                contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+                leading: const Icon(Icons.schedule_rounded, size: 20),
+                title: const Text('Deliver at'),
+                trailing: Text(
+                  schedule.label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
 
             const Divider(height: AppSpacing.xl),
 
@@ -162,6 +190,28 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   Future<void> _setSetting(String key, bool value) async {
     await ref.read(localStoreProvider).putSetting(key, value);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _pickTime(NotificationSchedule schedule) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: schedule.hour, minute: schedule.minute),
+      helpText: 'Deliver notifications at',
+    );
+    if (picked == null) return;
+
+    await ref
+        .read(localStoreProvider)
+        .putSetting(
+          SettingKeys.notifyTimeOfDay,
+          picked.hour * 60 + picked.minute,
+        );
+    if (!mounted) return;
+    setState(() {});
+
+    // The change only reaches Android on the next detected rotation, which
+    // could be tomorrow. Say so rather than letting it look broken tonight.
+    _toast('Your next shop notification will arrive at ${picked.format(context)}.');
   }
 
   Future<void> _runSyncNow() async {

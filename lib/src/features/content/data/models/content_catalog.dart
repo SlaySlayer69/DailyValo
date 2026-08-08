@@ -1,6 +1,7 @@
 import '../../../../core/errors/app_exception.dart';
 import 'accessory_item.dart';
 import 'content_tier.dart';
+import 'skin_ordering.dart';
 import 'weapon_skin.dart';
 
 /// Everything static the app needs, resolved and indexed once.
@@ -74,6 +75,18 @@ class ContentCatalog {
   late final List<WeaponSkin> purchasableSkins = skins
       .where((WeaponSkin s) => s.isPurchasable)
       .toList(growable: false);
+
+  /// [purchasableSkins] in the order a person browses them — weapon class, then
+  /// weapon, then rarity. See [SkinOrdering].
+  ///
+  /// Sorted once and cached, because the picker filters ~1600 skins on every
+  /// keystroke and re-sorting each time would be paying for the same answer
+  /// over and over. Filtering a sorted list keeps it sorted, so the search
+  /// results come out ordered for free.
+  late final List<WeaponSkin> browsableSkins = SkinOrdering.sorted(
+    purchasableSkins,
+    tierOf,
+  );
 
   bool get isStale =>
       DateTime.now().difference(fetchedAt) > const Duration(hours: 24);
