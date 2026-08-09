@@ -12,9 +12,9 @@ import es.antonborri.home_widget.HomeWidgetProvider
 import java.io.File
 
 /**
- * The home screen widget: four skin renders on black, each framed in the colour
- * of its rarity. No text — a home screen is glanced at, and the artwork is what
- * makes a skin recognisable in half a second.
+ * The home screen widget: four skin renders in a 2x2 grid on black, each framed
+ * in the colour of its rarity. No text — a home screen is glanced at, and the
+ * artwork is what makes a skin recognisable in half a second.
  *
  * The frame colour is applied by tinting each tile's background and insetting
  * the image by the border width. RemoteViews cannot restyle a drawable at
@@ -62,9 +62,10 @@ class DailyShopWidget : HomeWidgetProvider() {
             ?.let { BitmapFactory.decodeFile(it) }
 
         if (bitmap == null) {
-            // An empty slot is hidden rather than shown as a blank frame, so a
-            // shop that returned three offers looks intentional.
-            views.setViewVisibility(tile.frameId, View.GONE)
+            // INVISIBLE, not GONE: the tiles are weighted, so removing one
+            // would resize the other three and break the 2x2 grid. An empty
+            // slot holds its place.
+            views.setViewVisibility(tile.frameId, View.INVISIBLE)
             return
         }
 

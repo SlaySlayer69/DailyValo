@@ -15,8 +15,8 @@ a group chat, your gallery.
 It is a purpose-built image, not a screenshot: no status bar, no half-scrolled
 list, no date or heading taking up room, and the same card from every phone.
 
-**Home screen widget.** Four tiles on black, each showing a skin from today's
-shop framed in the colour of its rarity. No text — a home screen is glanced at,
+**Home screen widget.** Four tiles in a 2x2 grid on black, each showing a skin
+from today's shop framed in the colour of its rarity. No text — a home screen is glanced at,
 and the artwork is what makes a skin recognisable in half a second. It updates
 with the background check, so it stays current without opening the app, and
 tapping it opens the shop.

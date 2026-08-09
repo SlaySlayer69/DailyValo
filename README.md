@@ -93,8 +93,11 @@ asserts the exact canvas width for one, four and six offers, that the wordmark
 is centred to within a pixel, and that long names such as *Singularity Sheriff*
 are not cut to an ellipsis.
 
-**The home screen widget** is four skin renders on black, each framed in the
-colour of its rarity, with no text at all. RemoteViews cannot load a URL, so the
+**The home screen widget** is four skin renders in a 2x2 grid on black, each
+framed in the colour of its rarity, with no text at all. A grid rather than a
+row of four: a weapon render is wide, and four tiles side by side are tall
+strips that waste most of their height on empty background while shrinking the
+skin to fit the narrow width. RemoteViews cannot load a URL, so the
 artwork is downloaded by the app and the paths handed to the widget provider,
 which decodes them in the app's own process and passes bitmaps through the
 RemoteViews parcel — a `file://` URI from app-private storage is not readable by
