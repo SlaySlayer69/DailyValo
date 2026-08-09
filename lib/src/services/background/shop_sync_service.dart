@@ -140,22 +140,34 @@ class ShopSyncService {
         .map((WishlistEntry e) => e.label)
         .toList(growable: false);
 
-    if (!schedule.enabled) {
+    // In the device's own zone, so "09:00" survives a clock change, and
+    // anchored to the rotation rather than to now — see `deliveryFor`.
+    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+    final tz.TZDateTime? at = schedule.deliveryFor(
+      rotatedAt: _rotationOf(shop, now),
+      now: now,
+    );
+
+    // Unconditionally, before either branch: anything still queued is about the
+    // shop that has just been replaced. Leaving it in place is how an alarm set
+    // under the old settings fires hours later with yesterday's four offers in
+    // it — including after the delivery time is switched back off.
+    await _deps.notifications.cancelScheduled();
+
+    if (at == null) {
       if (wantsShop) await _deps.notifications.showDailyShop(_labelsFor(shop));
       if (wantsWishlist) {
         await _deps.notifications.showWishlistHit(matchedLabels: matchLabels);
       }
+      if (schedule.enabled) {
+        Log.d(
+          'Sync',
+          'Delivery time already passed for this rotation; '
+              'posting now instead of waiting a day',
+        );
+      }
       return null;
     }
-
-    // In the device's own zone, so "09:00" survives a clock change.
-    final tz.TZDateTime at = schedule.nextDeliveryAfter(
-      tz.TZDateTime.now(tz.local),
-    );
-
-    // A second rotation before the first was delivered replaces it, rather
-    // than leaving yesterday's digest queued behind today's.
-    await _deps.notifications.cancelScheduled();
 
     if (wantsShop) {
       await _deps.notifications.scheduleDailyShop(_labelsFor(shop), at);
@@ -168,6 +180,19 @@ class ShopSyncService {
     }
     Log.d('Sync', 'Notifications deferred to $at');
     return at;
+  }
+
+  /// When the offers we are holding came up.
+  ///
+  /// Riot only ever tells us when the *next* reset is, so the one that produced
+  /// this shop is a day earlier. Clamped to [now] so a nonsense countdown
+  /// cannot push the rotation into the future.
+  static tz.TZDateTime _rotationOf(Shop shop, tz.TZDateTime now) {
+    final tz.TZDateTime rotated = tz.TZDateTime.from(
+      shop.dailyResetAt.subtract(const Duration(days: 1)),
+      now.location,
+    );
+    return rotated.isAfter(now) ? now : rotated;
   }
 
   /// `Vandal: Prime` for each offer, in shop order.

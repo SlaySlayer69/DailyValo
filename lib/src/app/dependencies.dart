@@ -9,6 +9,7 @@ import '../core/storage/local_store.dart';
 import '../core/storage/secure_token_store.dart';
 import '../core/utils/logger.dart';
 import '../features/auth/data/datasources/riot_auth_api.dart';
+import '../features/auth/data/models/riot_session.dart';
 import '../features/content/data/datasources/valorant_api_client.dart';
 import '../features/content/data/repositories/content_repository.dart';
 import '../features/player/data/repositories/player_repository.dart';
@@ -85,6 +86,7 @@ class AppDependencies {
       refresher: authApi.reauthenticate,
     );
     await sessions.restore();
+    await _recoverSessionFromCookie(sessions, authApi);
 
     final Dio gameDio = DioFactory.createGameClient(
       sessionManager: sessions,
@@ -145,6 +147,40 @@ class AppDependencies {
       player: player,
       notifications: notifications,
     );
+  }
+
+  /// Rebuilds a session from the stored cookie when there is none to restore.
+  ///
+  /// Without this the app drops to the login screen roughly an hour after every
+  /// sign-in: the access token lapses, the renewal that would fix it needs a
+  /// session that has already been discarded, and the user is left pressing a
+  /// login button that signs them straight in without asking for anything.
+  ///
+  /// The cost of not doing it is not just that annoyance. A missing session
+  /// means `canFetchShop` is false, so every background run skips, and no shop
+  /// notification is ever scheduled — which is invisible, because nothing
+  /// arrives to tell you nothing arrived.
+  ///
+  /// Failure is not fatal: it just means the login screen, which is where the
+  /// user would have been anyway.
+  static Future<void> _recoverSessionFromCookie(
+    RiotSessionManager sessions,
+    RiotAuthApi authApi,
+  ) async {
+    if (sessions.isAuthenticated) return;
+    if (!await authApi.hasSessionCookie()) return;
+
+    try {
+      final RiotSession session = await authApi
+          .signInWithStoredCookie()
+          // Start-up cannot hang on Riot being slow; the login screen is a
+          // perfectly good fallback.
+          .timeout(const Duration(seconds: 12));
+      await sessions.adopt(session);
+      Log.d('Boot', 'Restored the session from the stored cookie');
+    } on Object catch (e) {
+      Log.d('Boot', 'Could not restore a session from the cookie: $e');
+    }
   }
 
   bool get isDemoMode => localStore.setting<bool>(SettingKeys.demoMode, false);

@@ -101,8 +101,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
 
             SwitchListTile.adaptive(
               value: schedule.enabled,
-              onChanged: (bool value) =>
-                  _setSetting(SettingKeys.notifyAtFixedTime, value),
+              onChanged: _setFixedTime,
               title: const Text('Notification time'),
               subtitle: Text(
                 schedule.enabled
@@ -190,6 +189,32 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   Future<void> _setSetting(String key, bool value) async {
     await ref.read(localStoreProvider).putSetting(key, value);
     if (mounted) setState(() {});
+  }
+
+  /// Turning the delivery time on is the first moment the app has a time to be
+  /// punctual about, so it is the right moment — and the only honest one — to
+  /// ask for the permission that makes it punctual.
+  ///
+  /// A refusal is not an error: the notification still arrives, batched into
+  /// the next window Android is willing to wake for, which can be twenty
+  /// minutes late. Say so once instead of letting it look broken.
+  Future<void> _setFixedTime(bool value) async {
+    await _setSetting(SettingKeys.notifyAtFixedTime, value);
+    if (!value) return;
+
+    final NotificationService notifications = ref.read(
+      notificationServiceProvider,
+    );
+    if (await notifications.canScheduleExactly()) return;
+    await notifications.requestExactScheduling();
+
+    if (!mounted) return;
+    if (!await notifications.canScheduleExactly() && mounted) {
+      _toast(
+        'Without the alarms & reminders permission your notification can '
+        'arrive up to about 20 minutes late.',
+      );
+    }
   }
 
   Future<void> _pickTime(NotificationSchedule schedule) async {

@@ -15,6 +15,14 @@
          screen went off, instead of being cut mid-flight. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- Delivering a notification at the minute the user picked. Without it,
+         Android batches the alarm into the next Doze maintenance window, so a
+         digest set for 09:00 arrives whenever the phone next wakes up. Denied
+         by default on Android 14+ and requested only once a delivery time has
+         actually been chosen; the app falls back to an inexact alarm if the
+         user says no. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+
     <application
         android:label="DailyValo"
         android:name="${applicationName}"

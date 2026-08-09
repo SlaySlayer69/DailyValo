@@ -81,6 +81,46 @@ class RiotAuthApi {
   /// has been revoked or aged out, which is the signal to send the user back to
   /// the login screen.
   Future<RiotSession> reauthenticate(RiotSession current) async {
+    final _TokenPair tokens = await _tokensFromCookie();
+    final String entitlements = await _fetchEntitlementsToken(
+      tokens.accessToken,
+    );
+
+    return current.copyWith(
+      accessToken: tokens.accessToken,
+      idToken: tokens.idToken,
+      entitlementsToken: entitlements,
+      expiresAt:
+          Jwt.expiry(tokens.accessToken) ??
+          DateTime.now().toUtc().add(Duration(seconds: tokens.expiresIn)),
+    );
+  }
+
+  /// Signs in from the stored cookie alone, with no WebView and no user
+  /// interaction.
+  ///
+  /// This is what stops the app dropping to the login screen an hour after
+  /// every sign-in. The access token lapses in about an hour; when the app is
+  /// next opened cold, a session that cannot be renewed is discarded, and the
+  /// only visible symptom is a login button that signs you straight back in
+  /// without asking for anything — because Riot's own cookie, in the WebView's
+  /// jar, was still perfectly good. Replaying that cookie here rebuilds the
+  /// whole session instead.
+  ///
+  /// It matters far beyond the annoyance: with no stored session the background
+  /// worker has nothing to authenticate with, so it skips every run and no shop
+  /// notification is ever scheduled.
+  Future<RiotSession> signInWithStoredCookie() async {
+    final _TokenPair tokens = await _tokensFromCookie();
+    return _buildSession(tokens);
+  }
+
+  /// Replays the `ssid` cookie against `/authorize` and returns the fresh
+  /// tokens Riot redirects back with.
+  ///
+  /// Shared by [reauthenticate] and [signInWithStoredCookie]: the exchange is
+  /// identical, only what the caller builds from the result differs.
+  Future<_TokenPair> _tokensFromCookie() async {
     final String? ssid = await _secureStore.readSessionCookie();
     if (ssid == null || ssid.isEmpty) {
       throw const AuthException(
@@ -124,19 +164,31 @@ class RiotAuthApi {
     final String? rotated = _ssidFromSetCookie(response.headers);
     if (rotated != null) await _secureStore.writeSessionCookie(rotated);
 
-    final _TokenPair tokens = _parseRedirect(location);
-    final String entitlements = await _fetchEntitlementsToken(
-      tokens.accessToken,
-    );
+    return _parseRedirect(location);
+  }
 
-    return current.copyWith(
-      accessToken: tokens.accessToken,
-      idToken: tokens.idToken,
-      entitlementsToken: entitlements,
-      expiresAt:
-          Jwt.expiry(tokens.accessToken) ??
-          DateTime.now().toUtc().add(Duration(seconds: tokens.expiresIn)),
-    );
+  /// Copies the `ssid` cookie out of the WebView jar into secure storage.
+  ///
+  /// Called whenever the app comes to the foreground while signed in. The
+  /// cookie in the jar is the one Riot keeps current; ours is a copy taken at
+  /// sign-in, and if that copy was never made — or has since been rotated —
+  /// silent refresh dies quietly and takes background notifications with it.
+  /// Re-reading it costs nothing and repairs the case where the capture at
+  /// sign-in came back empty.
+  ///
+  /// Returns true when a cookie was stored.
+  Future<bool> captureSessionCookie(Map<String, String> jar) async {
+    final String? ssid = jar[RiotConstants.sessionCookieName];
+    if (ssid == null || ssid.isEmpty) return false;
+    await _secureStore.writeSessionCookie(ssid);
+    return true;
+  }
+
+  /// Whether a refresh cookie is on hand at all — the single thing that decides
+  /// if the background worker can do anything.
+  Future<bool> hasSessionCookie() async {
+    final String? ssid = await _secureStore.readSessionCookie();
+    return ssid != null && ssid.isNotEmpty;
   }
 
   // ---------------------------------------------------------------------------

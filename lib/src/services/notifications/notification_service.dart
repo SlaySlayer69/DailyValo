@@ -138,6 +138,55 @@ class NotificationService {
     return await android?.areNotificationsEnabled() ?? false;
   }
 
+  /// Whether Android will let us aim an alarm at an exact minute.
+  ///
+  /// Denied by default on Android 14+, which is the difference between a
+  /// notification set for 09:00 arriving at 09:00 and arriving whenever the
+  /// device next comes out of Doze.
+  Future<bool> canScheduleExactly() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    try {
+      return await android?.canScheduleExactNotifications() ?? false;
+    } on Object catch (e) {
+      Log.e('Notify', 'Could not read exact-alarm permission', e);
+      return false;
+    }
+  }
+
+  /// Asks for the exact-alarm permission, sending the user to the system screen
+  /// that grants it.
+  ///
+  /// Only worth asking once the user has actually chosen a delivery time — up
+  /// to that point the app has no time to be exact about.
+  Future<bool> requestExactScheduling() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    try {
+      return await android?.requestExactAlarmsPermission() ?? false;
+    } on Object catch (e) {
+      Log.e('Notify', 'Could not request the exact-alarm permission', e);
+      return false;
+    }
+  }
+
+  /// Exact when Android allows it, inexact otherwise — never a failure.
+  ///
+  /// `exactAllowWhileIdle` throws if the permission is missing, so the check
+  /// has to happen per schedule rather than once at start-up: the user can
+  /// revoke it from system settings while the app is running.
+  Future<AndroidScheduleMode> _scheduleMode() async {
+    return await canScheduleExactly()
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+
   /// The silent daily digest.
   ///
   /// Body format, exactly as specified:
@@ -179,10 +228,13 @@ class NotificationService {
   /// scheduled, and it survives a reboot via the plugin's boot receiver. A
   /// WorkManager task aimed at 18:00 is at Doze's mercy and can slip by hours.
   ///
-  /// Inexact on purpose. Exact alarms need `SCHEDULE_EXACT_ALARM`, which
-  /// Android 14 gates behind a special-access screen and which Play treats as a
-  /// restricted permission — a heavy ask for a shop digest that is no less
-  /// useful a few minutes late.
+  /// Exact when the user has granted `SCHEDULE_EXACT_ALARM`, inexact when they
+  /// have not. The distinction matters once a delivery time has been chosen:
+  /// an inexact alarm is batched into whatever Doze maintenance window comes
+  /// next, so "09:00" can land at 09:20 on a phone that slept through the
+  /// night — which is exactly the complaint that prompted this. Falling back
+  /// rather than demanding the permission keeps a refusal costing punctuality,
+  /// not the notification.
   ///
   /// [at] is zone-aware: the plugin keeps the zone alongside the timestamp, so
   /// a reboot re-arms the alarm against the same wall clock rather than the
@@ -199,7 +251,7 @@ class NotificationService {
       body: _shopBody(offerLabels),
       scheduledDate: at,
       notificationDetails: _shopDetails(offerLabels),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: await _scheduleMode(),
       payload: NotificationPayload.dailyShop,
     );
     Log.d('Notify', 'Daily shop notification scheduled for $at');
@@ -215,7 +267,7 @@ class NotificationService {
       body: _wishlistBody,
       scheduledDate: at,
       notificationDetails: _wishlistDetails(matchedLabels),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: await _scheduleMode(),
       payload: NotificationPayload.wishlistHit,
     );
     Log.d('Notify', 'Wishlist alert scheduled for $at');
@@ -228,6 +280,42 @@ class NotificationService {
   Future<void> cancelScheduled() async {
     await _plugin.cancel(id: shopNotificationId);
     await _plugin.cancel(id: wishlistNotificationId);
+  }
+
+  /// Clears notifications that have **already been delivered**, leaving
+  /// anything still queued for later alone.
+  ///
+  /// Called when the app is opened: once you have seen your shop in the app,
+  /// the digest about it is spent. Until then it stays in the shade for as long
+  /// as it takes — nothing here sets a timeout, and the notifications are not
+  /// `ongoing`, so a swipe is the only other thing that removes one.
+  ///
+  /// The distinction from [cancelScheduled] is the whole point. `cancel(id:)`
+  /// removes a posted notification *and* an alarm waiting under the same id,
+  /// so clearing the shade indiscriminately on every app open would silently
+  /// delete the 09:00 delivery of anyone who opened the app at 08:00. Only ids
+  /// Android reports as currently showing are touched.
+  Future<void> dismissDelivered() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    final AndroidFlutterLocalNotificationsPlugin? android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) return;
+
+    try {
+      final List<ActiveNotification> active = await android
+          .getActiveNotifications();
+      for (final ActiveNotification n in active) {
+        final int? id = n.id;
+        if (id == shopNotificationId || id == wishlistNotificationId) {
+          await _plugin.cancel(id: id!);
+        }
+      }
+    } on Object catch (e) {
+      // Never fatal: the worst case is a notification the user swipes away.
+      Log.e('Notify', 'Could not read the active notifications', e);
+    }
   }
 
   static String _shopBody(List<String> offerLabels) => offerLabels.join(' - ');
@@ -251,6 +339,13 @@ class NotificationService {
         enableVibration: false,
         onlyAlertOnce: true,
         category: AndroidNotificationCategory.status,
+        // Stated rather than left to the defaults, because "how long does it
+        // stay?" is a real question about this notification. No `timeoutAfter`:
+        // it never expires on its own. Not `ongoing`: a swipe dismisses it.
+        // `autoCancel`: opening it from the shade counts as having read it, and
+        // opening the app clears it via `dismissDelivered`.
+        autoCancel: true,
+        ongoing: false,
         // Four `Weapon: Skin` pairs do not fit on one collapsed line.
         styleInformation: BigTextStyleInformation(
           body,
@@ -269,6 +364,9 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
         category: AndroidNotificationCategory.recommendation,
+        // As above: no expiry, dismissible, cleared once you have been in.
+        autoCancel: true,
+        ongoing: false,
         // Expanding shows *which* skins matched without opening the app.
         styleInformation: matchedLabels.isEmpty
             ? null
@@ -278,6 +376,22 @@ class NotificationService {
               ),
       ),
     );
+  }
+
+  /// How many notifications Android is holding for later.
+  ///
+  /// The difference between "the alarm was never set" and "the alarm was set
+  /// and did not arrive" is otherwise invisible, and they have completely
+  /// different causes.
+  Future<int> pendingCount() async {
+    try {
+      final List<PendingNotificationRequest> pending = await _plugin
+          .pendingNotificationRequests();
+      return pending.length;
+    } on Object catch (e) {
+      Log.e('Notify', 'Could not read pending notifications', e);
+      return 0;
+    }
   }
 
   Future<void> cancelAll() => _plugin.cancelAll();

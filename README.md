@@ -63,9 +63,30 @@ at reset — only the delivery moves, and nothing about the shop changes in
 between, so a held notification is still correct when it arrives. The alarm is
 handed to Android via `zonedSchedule` rather than waking a worker at the chosen
 hour: the OS delivers it whether or not the app gets scheduled, and it survives
-a reboot. It is deliberately an *inexact* alarm — exact ones need
-`SCHEDULE_EXACT_ALARM`, a restricted permission, which is a heavy ask for a shop
-digest that is no worse for being a few minutes late.
+a reboot.
+
+The alarm is **exact when Android permits it and inexact when it does not**.
+`SCHEDULE_EXACT_ALARM` is declared and requested at the moment the delivery time
+is switched on — the only moment the app has a time to be punctual about — and a
+refusal costs punctuality rather than the notification. It matters more than it
+sounds: an inexact alarm is batched into the next Doze maintenance window, so a
+digest set for 09:00 can land at 09:20 on a phone that slept through the night,
+with nothing actually broken. The diagnostics screen reports which of the two is
+in force.
+
+Delivery is anchored to the **rotation**, not to the moment the app noticed it.
+Computing it from *now* meant a background check that Android deferred past the
+chosen hour scheduled the digest for that hour *tomorrow*, and the day it was
+about passed in silence — a phone asleep from 02:00 to 09:20 got nothing at all.
+`deliveryFor` resolves the first occurrence of the chosen wall clock after the
+rotation, and posts immediately when that instant is already behind us.
+
+Nothing sets a timeout on either notification and neither is `ongoing`, so one
+stays in the shade until it is swiped, opened, or cleared by opening the app.
+That last part cancels only ids Android reports as *currently showing*:
+`cancel(id:)` removes a posted notification and a queued alarm under the same
+id alike, so clearing the shade indiscriminately would silently delete the 09:00
+delivery of anyone who opened the app at 08:00.
 
 The chosen time is a **wall clock in the device's own timezone**, read via
 `flutter_timezone` and resolved against the IANA database. That is not
@@ -118,7 +139,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 190 unit tests, no device needed
+flutter test                # 199 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -306,6 +327,19 @@ keeps the last segment — silently truncating an opaque token that contains one
 A truncated `ssid` would sign you in once and then quietly break every refresh
 afterwards.
 
+The cookie is re-read on **every app resume**, not just at sign-in, and a stored
+one is enough to rebuild a whole session on its own — `signInWithStoredCookie`
+needs nothing from a previous session, because a session is exactly what a token
+pair plus an entitlements JWT already is. Both of those exist because the
+failure they prevent is close to silent. If the capture at sign-in came back
+empty, or Riot rotated the cookie since, the next refresh fails with
+`requiresReLogin`, the session manager signs you out, and the visible symptom is
+a *Login with Riot* button that signs you straight in again without asking for
+anything — mildly annoying, and easy to live with. What is not visible is that
+`canFetchShop` is now false, so every background run skips, no rotation is ever
+detected, and no notification is ever scheduled. Nothing arrives to tell you
+nothing arrived.
+
 ### Two things worth knowing before you ship this
 
 1. **These endpoints are undocumented.** They are the same ones the official
@@ -326,7 +360,7 @@ afterwards.
 
 ## Testing
 
-190 unit tests, no device or network required:
+199 unit tests, no device or network required:
 
 ```
 test/

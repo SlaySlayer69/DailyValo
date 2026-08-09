@@ -187,6 +187,120 @@ void main() {
     });
   });
 
+  // The bug these pin down: the delivery time used to be computed from *now*,
+  // so a background check that Android deferred until after the chosen hour
+  // scheduled the digest for that hour tomorrow, and the day it was about went
+  // by in silence. Anchoring to the rotation is what fixes it.
+  group('NotificationSchedule delivery for a rotation', () {
+    // 00:00 UTC reset, which is 02:00 in Berlin.
+    final tz.TZDateTime rotation = tz.TZDateTime(berlin, 2026, 8, 8, 2);
+
+    test('schedules for the chosen time when it is still ahead', () {
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 2, 3),
+        ),
+        tz.TZDateTime(berlin, 2026, 8, 8, 9),
+      );
+    });
+
+    test('says "now" when the chosen time already went by', () {
+      // The worker finally ran at 09:20 — exactly the reported case. Waiting
+      // until 09:00 tomorrow would skip today's shop entirely.
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 9, 20),
+        ),
+        isNull,
+      );
+    });
+
+    test('says "now" on the exact minute rather than scheduling a day out', () {
+      // `zonedSchedule` rejects a date that is not strictly in the future, so
+      // this instant has to resolve to an immediate post.
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 9),
+        ),
+        isNull,
+      );
+    });
+
+    test('a whole day late still delivers, not two days late', () {
+      // A phone left off overnight: the rotation is old, the chosen time long
+      // gone. It should post now, not queue for tomorrow.
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 9, 14),
+        ),
+        isNull,
+      );
+    });
+
+    test('a delivery time before the reset lands the following night', () {
+      // 01:00 is earlier in the day than the 02:00 rotation, so the next time
+      // the clock reads 01:00 is tomorrow — and the shop is still this one.
+      const NotificationSchedule at0100 = NotificationSchedule(
+        enabled: true,
+        minuteOfDay: 60,
+      );
+      expect(
+        at0100.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 2, 3),
+        ),
+        tz.TZDateTime(berlin, 2026, 8, 9, 1),
+      );
+    });
+
+    test('is always "now" while the schedule is off', () {
+      expect(
+        NotificationSchedule.immediate.deliveryFor(
+          rotatedAt: rotation,
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 2, 3),
+        ),
+        isNull,
+      );
+    });
+
+    test('a rotation in the future is clamped to now', () {
+      // A nonsense countdown from Riot, or a device clock behind the server's.
+      // Without the clamp this would schedule a day and a half out.
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: tz.TZDateTime(berlin, 2026, 8, 9, 2),
+          now: tz.TZDateTime(berlin, 2026, 8, 8, 3),
+        ),
+        tz.TZDateTime(berlin, 2026, 8, 8, 9),
+      );
+    });
+
+    test('resolves against the real offset on the day the clocks go back', () {
+      // 25-hour day. The digest for the 02:00 rotation still lands at 09:00
+      // wall clock, not 08:00.
+      final tz.TZDateTime at = at0900.deliveryFor(
+        rotatedAt: tz.TZDateTime(berlin, 2026, 10, 25, 2),
+        now: tz.TZDateTime(berlin, 2026, 10, 25, 2, 5),
+      )!;
+      expect(at.hour, 9);
+      expect(at.day, 25);
+    });
+
+    test('works in UTC too, for a device with no zone of its own', () {
+      expect(
+        at0900.deliveryFor(
+          rotatedAt: tz.TZDateTime(utc, 2026, 8, 8),
+          now: tz.TZDateTime(utc, 2026, 8, 8, 0, 3),
+        ),
+        tz.TZDateTime(utc, 2026, 8, 8, 9),
+      );
+    });
+  });
+
   group('NotificationSchedule formatting', () {
     test('renders a zero-padded 24-hour label', () {
       expect(at0900.label, '09:00');

@@ -4,6 +4,43 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.0.1
+
+**The notifications that never arrived.** Four separate faults, each of which
+was enough on its own to keep the daily digest from ever showing up.
+
+*You were being signed out about an hour after every sign-in.* The app kept the
+RSO cookie it captured at sign-in, and if that capture came back empty — or Riot
+rotated the cookie afterwards — the first token renewal failed and took the whole
+session with it. The visible symptom was small: a *Login with Riot* button that
+signed you straight back in without asking for a password. The invisible one was
+not. With no session, the background check has nothing to fetch, so it skipped
+every run, no shop rotation was ever detected, and no notification was ever
+scheduled. The cookie is now re-read every time the app comes to the foreground,
+and a stored one is enough to rebuild the session by itself at start-up.
+
+*A late check pushed the notification a day out.* The shop rotates at 02:00, and
+the check that notices it is a background task Android is free to defer while
+the phone is asleep. If it finally ran at 09:30 with delivery set to 09:00, it
+scheduled for 09:00 **tomorrow** — and the day it was actually about went by in
+silence. Delivery is now anchored to the rotation rather than to whenever we got
+around to noticing, and a time that has already passed posts immediately.
+
+*The alarm can now be exact.* Without the alarms & reminders permission Android
+batches it into the next time the device wakes up, so 09:00 becomes 09:20 on a
+phone that slept through the night. The permission is asked for when you switch
+the delivery time on, and refusing it costs punctuality, not the notification.
+
+*Notifications stay until you deal with them.* Neither one expires on its own,
+and neither is sticky — a swipe still removes it. Opening the app clears what is
+in the shade, and only what is actually in the shade: a queued 09:00 delivery is
+no longer thrown away by opening the app at 08:00.
+
+Settings ▸ *Diagnostics* now reports the notification permission, whether exact
+delivery is allowed, whether the refresh cookie is stored, and how many alarms
+Android is holding — so "nothing arrived" can be told apart from "nothing was
+ever scheduled" without guessing.
+
 ## v3.0.0
 
 **Share your shop as an image.** A share button on the Daily Shop and the Night
