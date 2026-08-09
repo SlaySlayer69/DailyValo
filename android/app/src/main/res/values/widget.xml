@@ -1,17 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Mirrors lib/src/app/theme/app_colors.dart. The widget sits on the user's
-     wallpaper, not inside the app, so it has to carry its own palette. -->
+     wallpaper, not inside the app, so it carries its own palette. -->
 <resources>
-    <color name="widget_surface">#15181D</color>
-    <color name="widget_border">#262B33</color>
-    <color name="widget_accent">#FF4655</color>
-    <color name="widget_text_primary">#ECEFF3</color>
-    <color name="widget_text_secondary">#98A0AC</color>
+    <color name="widget_background">#000000</color>
+    <color name="widget_tile_background">#0B0C0F</color>
 
-    <string name="widget_title">DAILY SHOP</string>
-    <string name="widget_description">Today\'s four Valorant offers and the time left to buy them.</string>
-    <string name="widget_empty">Open DailyValo to load your shop.</string>
-    <string name="widget_refreshing">Refreshing…</string>
-    <!-- e.g. "Resets in 4h 12m" -->
-    <string name="widget_resets_in">Resets in %1$dh %2$02dm</string>
+    <string name="widget_description">Today\'s four Valorant offers.</string>
+    <string name="widget_tile_description">Skin on offer today</string>
 </resources>

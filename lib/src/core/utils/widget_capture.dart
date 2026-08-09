@@ -42,13 +42,38 @@ abstract final class WidgetCapture {
     final OverlayEntry entry = OverlayEntry(
       builder: (BuildContext overlayContext) => Transform.translate(
         offset: _offScreen,
-        child: Material(
-          type: MaterialType.transparency,
-          child: RepaintBoundary(
-            key: boundaryKey,
-            // The card sets its own width; unbounded height lets it be as tall
-            // as its content rather than the screen.
-            child: Builder(builder: build),
+        // An overlay child is constrained to the screen, so a card asking for
+        // 1080 logical pixels was being squeezed into the phone's ~411 and
+        // rendered with 1080-scale type inside a 411-wide box: enormous text,
+        // truncated names, an overflowing header. Unconstrained lets it take
+        // the width it was designed at.
+        // OverflowBox rather than UnconstrainedBox: both hand the child
+        // unbounded constraints, but UnconstrainedBox reports an overflow (and
+        // paints stripes in debug) the moment the child is wider than the
+        // screen — which here is the entire point.
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          // Minimums explicitly zero: OverflowBox forwards the parent's
+          // minimum constraints unless told otherwise, which would inflate a
+          // card smaller than the screen to screen size and bake a margin of
+          // empty background into the image.
+          minWidth: 0,
+          minHeight: 0,
+          maxWidth: double.infinity,
+          maxHeight: double.infinity,
+          child: MediaQuery(
+            // The card must look the same from every phone, so the device's
+            // font-size setting cannot be allowed to reflow it.
+            data: MediaQuery.of(overlayContext).copyWith(
+              textScaler: TextScaler.noScaling,
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: RepaintBoundary(
+                key: boundaryKey,
+                child: Builder(builder: build),
+              ),
+            ),
           ),
         ),
       ),

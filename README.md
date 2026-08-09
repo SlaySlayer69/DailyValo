@@ -77,13 +77,29 @@ alongside the alarm so a reboot re-arms against the same wall clock rather than
 the same offset. Both clock-change days are covered by tests against the real
 database.
 
-**Sharing and the home screen.** The share button on the shop and the Night
-Market renders a purpose-built 1080px card off-screen and hands the PNG to
-Android's share sheet — not a screenshot, so there is no status bar, no
-half-scrolled list, and it looks the same from every phone. The home screen
-widget shows the four offers as text rather than a rendered bitmap: a widget is
-re-inflated on wallpaper changes, launcher restarts and rotation, and text
-redraws correctly through all of them where a cached image would go stale.
+**Sharing.** The share button renders a purpose-built card off-screen and hands
+the PNG to Android's share sheet — not a screenshot, so there is no status bar,
+no half-scrolled list, and it looks the same from every phone. The skins sit
+side by side with the artwork given most of each tile: a shop is something you
+*look* at, so the name and price are the caption rather than the subject.
+
+Two constraint traps live here, both of which shipped broken once and are now
+pinned by tests. An overlay child is limited to the screen, so a card asking for
+1420 logical pixels was silently rendered at the phone's 411 with 1420-scale
+type inside it. And `OverflowBox` forwards the parent's *minimum* constraints
+unless told otherwise, which inflates a card narrower than the screen to screen
+size and bakes a margin of empty background into the image. `test/share_card_test.dart`
+asserts the exact canvas width for one, four and six offers, that the wordmark
+is centred to within a pixel, and that long names such as *Singularity Sheriff*
+are not cut to an ellipsis.
+
+**The home screen widget** is four skin renders on black, each framed in the
+colour of its rarity, with no text at all. RemoteViews cannot load a URL, so the
+artwork is downloaded by the app and the paths handed to the widget provider,
+which decodes them in the app's own process and passes bitmaps through the
+RemoteViews parcel — a `file://` URI from app-private storage is not readable by
+the launcher. The frame is a tinted box behind a black-backed image, because
+RemoteViews can set a background colour but cannot restyle a drawable's stroke.
 
 **What a collection is worth.** Riot publishes no prices and no purchase
 history, so the Collection total is derived from the price points Riot uses per
@@ -99,7 +115,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 180 unit tests, no device needed
+flutter test                # 190 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -307,7 +323,7 @@ afterwards.
 
 ## Testing
 
-180 unit tests, no device or network required:
+190 unit tests, no device or network required:
 
 ```
 test/

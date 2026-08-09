@@ -20,14 +20,13 @@ class ShareButton extends StatefulWidget {
     required this.title,
     required this.entries,
     super.key,
-    this.subtitle,
-    this.footnote,
     this.shareText,
   });
 
+  /// Only used to name the file — the card itself carries no title, so the
+  /// image is all skins and no chrome.
   final String title;
-  final String? subtitle;
-  final String? footnote;
+
   final List<ShareEntry> entries;
 
   /// Accompanies the image where the target app supports it.
@@ -62,16 +61,9 @@ class _ShareButtonState extends State<ShareButton> {
       final Uint8List png = await WidgetCapture.toPng(
         context: context,
         imageUrls: widget.entries
-            .map(
-              (ShareEntry e) => e.skin.displayIcon ?? e.skin.artwork ?? '',
-            )
+            .map((ShareEntry e) => e.artwork ?? '')
             .toList(growable: false),
-        build: (BuildContext _) => ShareCard(
-          title: widget.title,
-          subtitle: widget.subtitle,
-          footnote: widget.footnote,
-          entries: widget.entries,
-        ),
+        build: (BuildContext _) => ShareCard(entries: widget.entries),
       );
 
       final Directory dir = await getTemporaryDirectory();

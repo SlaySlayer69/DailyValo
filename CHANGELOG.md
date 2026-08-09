@@ -7,17 +7,19 @@ format matters: one `## vX.Y.Z` per version, newest first.
 ## v3.0.0
 
 **Share your shop as an image.** A share button on the Daily Shop and the Night
-Market turns the offers into a clean card — app name centred at the top, one row
-per skin with artwork and price, discounts marked — and hands it to Android's
-share sheet, so it goes wherever you send things: WhatsApp, Discord, a group
-chat, your gallery.
+Market turns the offers into a clean card — app name centred at the top, the
+skins side by side with the artwork given most of each tile — and hands it to
+Android's share sheet, so it goes wherever you send things: WhatsApp, Discord,
+a group chat, your gallery.
 
 It is a purpose-built image, not a screenshot: no status bar, no half-scrolled
-list, the same 1080px card from every phone.
+list, no date or heading taking up room, and the same card from every phone.
 
-**Home screen widget.** Today's four offers and the time left to buy them, right
-on the home screen. It updates with the background check, so it stays current
-without opening the app, and tapping it opens the shop.
+**Home screen widget.** Four tiles on black, each showing a skin from today's
+shop framed in the colour of its rarity. No text — a home screen is glanced at,
+and the artwork is what makes a skin recognisable in half a second. It updates
+with the background check, so it stays current without opening the app, and
+tapping it opens the shop.
 
 **Export and import your wishlist.** Two buttons at the bottom of the wishlist —
 in the middle of it when it is empty, which is exactly when you need the import.

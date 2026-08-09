@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Wide and short: four tiles side by side want a strip, not a square. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="180dp"
-    android:minHeight="110dp"
-    android:targetCellWidth="3"
-    android:targetCellHeight="2"
+    android:minWidth="250dp"
+    android:minHeight="80dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
     android:initialLayout="@layout/daily_shop_widget"
     android:previewLayout="@layout/daily_shop_widget"
     android:resizeMode="horizontal|vertical"

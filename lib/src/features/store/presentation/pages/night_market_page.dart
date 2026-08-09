@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/countdown.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../player/presentation/widgets/currency_chip.dart';
@@ -86,7 +85,6 @@ class _MarketContent extends ConsumerWidget {
             children: <Widget>[
               ShareButton(
                 title: 'Night Market',
-                subtitle: Formatters.shareDate(DateTime.now()),
                 entries: shop.nightMarket
                     .map(ShareEntry.fromDeal)
                     .toList(growable: false),
