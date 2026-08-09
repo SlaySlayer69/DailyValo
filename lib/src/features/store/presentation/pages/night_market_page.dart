@@ -9,6 +9,8 @@ import '../../../../core/widgets/state_views.dart';
 import '../../../player/presentation/widgets/currency_chip.dart';
 import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 import '../../data/models/shop.dart';
+import '../widgets/share_button.dart';
+import '../widgets/share_card.dart';
 import '../widgets/skin_card.dart';
 
 /// Tab 2 — the Night Market, which only exists for a couple of weeks per act.
@@ -78,15 +80,26 @@ class _MarketContent extends ConsumerWidget {
         SectionHeader(
           title: 'Night Market',
           subtitle: '${shop.nightMarket.length} discounted offers',
-          trailing: endsAt == null
-              ? null
-              : CountdownPill(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ShareButton(
+                title: 'Night Market',
+                entries: shop.nightMarket
+                    .map(ShareEntry.fromDeal)
+                    .toList(growable: false),
+                shareText: 'My Valorant Night Market.',
+              ),
+              if (endsAt != null)
+                CountdownPill(
                   target: endsAt,
                   label: 'Ends in',
                   icon: Icons.nightlight_round,
                   onElapsed: () =>
                       ref.read(shopControllerProvider.notifier).refresh(),
                 ),
+            ],
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         _SavingsSummary(total: totalSavings),

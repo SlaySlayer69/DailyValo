@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A 2x2 grid on black. Two equally weighted rows of two equally weighted
+     tiles, with the same 3dp margin on every side of every tile, so all four
+     are identical and the spacing is symmetric.
+
+     Square-ish tiles rather than the tall strips this started as: a weapon
+     render is wide, and a strip wastes most of its height on empty background
+     while shrinking the skin to fit the narrow width.
+
+     Each FrameLayout is tinted at runtime to the skin's rarity colour and pads
+     the image by 2dp, which is what produces the coloured frame — RemoteViews
+     cannot restyle a drawable's stroke. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="5dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:baselineAligned="false">
+
+            <FrameLayout
+                android:id="@+id/tile_frame_0"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:padding="2dp">
+
+                <ImageView
+                    android:id="@+id/tile_image_0"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/widget_tile_background"
+                    android:scaleType="fitCenter"
+                    android:padding="7dp"
+                    android:adjustViewBounds="false"
+                    android:contentDescription="@string/widget_tile_description" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/tile_frame_1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:padding="2dp">
+
+                <ImageView
+                    android:id="@+id/tile_image_1"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/widget_tile_background"
+                    android:scaleType="fitCenter"
+                    android:padding="7dp"
+                    android:adjustViewBounds="false"
+                    android:contentDescription="@string/widget_tile_description" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:baselineAligned="false">
+
+            <FrameLayout
+                android:id="@+id/tile_frame_2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:padding="2dp">
+
+                <ImageView
+                    android:id="@+id/tile_image_2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/widget_tile_background"
+                    android:scaleType="fitCenter"
+                    android:padding="7dp"
+                    android:adjustViewBounds="false"
+                    android:contentDescription="@string/widget_tile_description" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/tile_frame_3"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:padding="2dp">
+
+                <ImageView
+                    android:id="@+id/tile_image_3"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/widget_tile_background"
+                    android:scaleType="fitCenter"
+                    android:padding="7dp"
+                    android:adjustViewBounds="false"
+                    android:contentDescription="@string/widget_tile_description" />
+            </FrameLayout>
+        </LinearLayout>
+</LinearLayout>

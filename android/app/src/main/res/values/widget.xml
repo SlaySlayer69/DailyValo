@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors lib/src/app/theme/app_colors.dart. The widget sits on the user's
+     wallpaper, not inside the app, so it carries its own palette. -->
+<resources>
+    <color name="widget_background">#000000</color>
+    <color name="widget_tile_background">#0B0C0F</color>
+
+    <string name="widget_description">Today\'s four Valorant offers.</string>
+    <string name="widget_tile_description">Skin on offer today</string>
+</resources>

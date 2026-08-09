@@ -9,6 +9,7 @@ import '../../features/store/data/models/shop.dart';
 import '../../features/store/data/models/storefront_snapshot.dart';
 import '../../features/wishlist/data/models/wishlist_entry.dart';
 import '../notifications/notification_schedule.dart';
+import '../widgets/home_widget_service.dart';
 
 /// What a sync did, so the caller (and the tests) can tell.
 class ShopSyncOutcome {
@@ -70,6 +71,11 @@ class ShopSyncService {
     final Set<String> currentIds = shop.dailyOffers
         .map((ShopOffer o) => o.offerId)
         .toSet();
+
+    // Before the change check, not after: the widget should be current even on
+    // a run that finds nothing new, since the launcher may have dropped its
+    // copy in the meantime.
+    await HomeWidgetService.update(shop);
 
     // First run has no baseline. Record it silently rather than announcing a
     // "new" shop the user has been looking at all day.

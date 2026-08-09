@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Gradle's own build directory at the android/ root. The leading slash is
+# relative to this file, so it means android/build, not android/android/build.
+/build/

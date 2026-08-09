@@ -10,6 +10,8 @@ import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 import '../../data/models/shop.dart';
 import '../widgets/accessory_card.dart';
 import '../widgets/bundle_card.dart';
+import '../widgets/share_button.dart';
+import '../widgets/share_card.dart';
 import '../widgets/skin_card.dart';
 import 'bundle_detail_page.dart';
 
@@ -76,13 +78,25 @@ class _ShopContent extends ConsumerWidget {
         SectionHeader(
           title: 'Daily Shop',
           subtitle: 'Today\'s offers',
-          trailing: CountdownPill(
-            target: shop.dailyResetAt,
-            label: 'Resets in',
-            // The moment the countdown hits zero the cached storefront is
-            // stale by definition — refetch rather than showing 00:00:00.
-            onElapsed: () =>
-                ref.read(shopControllerProvider.notifier).refresh(),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ShareButton(
+                title: 'Daily Shop',
+                entries: shop.dailyOffers
+                    .map(ShareEntry.fromOffer)
+                    .toList(growable: false),
+                shareText: 'My Valorant shop today.',
+              ),
+              CountdownPill(
+                target: shop.dailyResetAt,
+                label: 'Resets in',
+                // The moment the countdown hits zero the cached storefront is
+                // stale by definition — refetch rather than showing 00:00:00.
+                onElapsed: () =>
+                    ref.read(shopControllerProvider.notifier).refresh(),
+              ),
+            ],
           ),
         ),
         if (hits.isNotEmpty) ...<Widget>[

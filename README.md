@@ -19,8 +19,8 @@ buzzes when something you are actually hunting for shows up.
 | --- | --- |
 | **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
-| **Wishlist** | Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
-| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those. |
+| **Wishlist** | Exportable and importable as a file. Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
+| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those — and the tab shows what the selection is worth at shop prices. |
 
 Everywhere: a persistent header with your Riot ID, competitive rank, and your
 Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
@@ -77,6 +77,40 @@ alongside the alarm so a reboot re-arms against the same wall clock rather than
 the same offset. Both clock-change days are covered by tests against the real
 database.
 
+**Sharing.** The share button renders a purpose-built card off-screen and hands
+the PNG to Android's share sheet — not a screenshot, so there is no status bar,
+no half-scrolled list, and it looks the same from every phone. The skins sit
+side by side with the artwork given most of each tile: a shop is something you
+*look* at, so the name and price are the caption rather than the subject.
+
+Two constraint traps live here, both of which shipped broken once and are now
+pinned by tests. An overlay child is limited to the screen, so a card asking for
+1420 logical pixels was silently rendered at the phone's 411 with 1420-scale
+type inside it. And `OverflowBox` forwards the parent's *minimum* constraints
+unless told otherwise, which inflates a card narrower than the screen to screen
+size and bakes a margin of empty background into the image. `test/share_card_test.dart`
+asserts the exact canvas width for one, four and six offers, that the wordmark
+is centred to within a pixel, and that long names such as *Singularity Sheriff*
+are not cut to an ellipsis.
+
+**The home screen widget** is four skin renders in a 2x2 grid on black, each
+framed in the colour of its rarity, with no text at all. A grid rather than a
+row of four: a weapon render is wide, and four tiles side by side are tall
+strips that waste most of their height on empty background while shrinking the
+skin to fit the narrow width. RemoteViews cannot load a URL, so the
+artwork is downloaded by the app and the paths handed to the widget provider,
+which decodes them in the app's own process and passes bitmaps through the
+RemoteViews parcel — a `file://` URI from app-private storage is not readable by
+the launcher. The frame is a tinted box behind a black-backed image, because
+RemoteViews can set a background colour but cannot restyle a drawable's stroke.
+
+**What a collection is worth.** Riot publishes no prices and no purchase
+history, so the Collection total is derived from the price points Riot uses per
+rarity — doubled for melee, which is priced differently and is exactly what
+people collect. That makes it an estimate of what the skins *cost*, never of
+what was paid: Night Market and bundle discounts leave no trace the app can
+read. Skins that were never sold are counted separately rather than guessed at.
+
 ---
 
 ## Getting started
@@ -84,7 +118,7 @@ database.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 159 unit tests, no device needed
+flutter test                # 190 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -141,6 +175,7 @@ lib/
     │   └── home/                    Tab shell + settings sheet
     └── services/
         ├── notifications/           Channels and the two notification shapes
+        ├── widgets/                 Home screen widget bridge
         └── background/              WorkManager dispatcher + sync service
 ```
 
@@ -291,7 +326,7 @@ afterwards.
 
 ## Testing
 
-159 unit tests, no device or network required:
+190 unit tests, no device or network required:
 
 ```
 test/

@@ -12,6 +12,7 @@ import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 import '../../../store/data/models/shop.dart';
 import '../../data/models/wishlist_entry.dart';
 import '../widgets/skin_picker_sheet.dart';
+import '../widgets/wishlist_transfer_bar.dart';
 
 /// Tab 3 — the skins the user is waiting for.
 ///
@@ -51,13 +52,25 @@ class WishlistPage extends ConsumerWidget {
                   'Add the skins you are hunting for. DailyValo checks your '
                   'shop after every reset and sends you an alert the moment '
                   'one shows up.',
-              action: FilledButton.icon(
-                onPressed: () => SkinPickerSheet.open(context),
-                icon: const Icon(Icons.add_rounded, size: 19),
-                label: const Text('Browse skins'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(200, 50),
-                ),
+              action: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  FilledButton.icon(
+                    onPressed: () => SkinPickerSheet.open(context),
+                    icon: const Icon(Icons.add_rounded, size: 19),
+                    label: const Text('Browse skins'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(200, 50),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  // Restoring a backup is the most useful thing on an empty
+                  // wishlist — right after a reinstall, this is the whole tab.
+                  const SizedBox(
+                    width: 320,
+                    child: WishlistTransferBar(),
+                  ),
+                ],
               ),
             )
           : _WishlistContent(
@@ -124,6 +137,8 @@ class _WishlistContent extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
         ],
+        const SizedBox(height: AppSpacing.lg),
+        const WishlistTransferBar(),
       ],
     );
   }

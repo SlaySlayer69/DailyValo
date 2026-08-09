@@ -16,8 +16,10 @@ import '../features/store/data/models/shop.dart';
 import '../features/store/data/repositories/store_repository.dart';
 import '../features/wishlist/data/models/wishlist_entry.dart';
 import '../features/wishlist/data/repositories/wishlist_repository.dart';
+import '../features/wishlist/data/wishlist_transfer.dart';
 import '../services/background/background_scheduler.dart';
 import '../services/notifications/notification_service.dart';
+import '../services/widgets/home_widget_service.dart';
 import 'dependencies.dart';
 
 // -----------------------------------------------------------------------------
@@ -123,6 +125,9 @@ class AppModeController extends Notifier<AppMode> {
   Future<void> signOut() async {
     await BackgroundScheduler.cancelAll();
     await ref.read(notificationServiceProvider).cancelAll();
+    // Someone else's shop must not stay on the home screen of a signed-out
+    // phone.
+    await HomeWidgetService.clear();
 
     // Riot's login lives in a WebView with its own cookie jar. Clearing our
     // keystore alone would leave that jar intact, and the next sign-in would
@@ -257,6 +262,15 @@ class WishlistController extends Notifier<List<WishlistEntry>> {
   Future<void> restore(WishlistEntry entry) async {
     await ref.read(wishlistRepositoryProvider).restore(entry);
     state = ref.read(wishlistRepositoryProvider).getAll();
+  }
+
+  /// Merges an exported wishlist into this one.
+  Future<ImportResult> import(List<WishlistEntry> entries) async {
+    final ImportResult result = await ref
+        .read(wishlistRepositoryProvider)
+        .importEntries(entries);
+    state = ref.read(wishlistRepositoryProvider).getAll();
+    return result;
   }
 
   bool contains(String skinUuid) =>
