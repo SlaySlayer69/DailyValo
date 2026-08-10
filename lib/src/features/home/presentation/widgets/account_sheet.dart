@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/storage/local_store.dart';
+import '../../../../features/store/data/models/shop.dart';
 import '../../../../services/background/shop_sync_service.dart';
 import '../../../../services/diagnostics/connection_diagnostics.dart';
 import '../../../../services/notifications/notification_schedule.dart';
@@ -155,9 +157,10 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               onTap: _busy ? null : _sendTestNotification,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Send a test notification'),
+              title: const Text('Test the shop notification'),
               subtitle: const Text(
-                'Confirms notifications are allowed on this device',
+                'Queues your real digest a minute from now, the same way the '
+                'shop reset does',
               ),
             ),
 
@@ -286,10 +289,33 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       }
       return;
     }
-    await notifications.showWishlistHit(
-      matchedLabels: const <String>['Vandal: Prime'],
+    // The real offers, so the test shows exactly what the morning would.
+    final Shop? shop = ref.read(shopControllerProvider).valueOrNull;
+    final List<String> labels =
+        shop?.dailyOffers
+            .map((ShopOffer o) => o.skin.notificationLabel)
+            .toList(growable: false) ??
+        const <String>[];
+
+    final tz.TZDateTime at = tz.TZDateTime.now(
+      tz.local,
+    ).add(const Duration(minutes: 1));
+
+    try {
+      await notifications.scheduleTest(at: at, offerLabels: labels);
+    } on Object catch (e) {
+      if (mounted) _toast('Could not queue the test: $e');
+      return;
+    }
+
+    if (!mounted) return;
+    // Says to close the app because that is the interesting part: a digest that
+    // only arrives while you are looking at the app proves nothing about a
+    // phone asleep at 09:30.
+    _toast(
+      'Queued for ${TimeOfDay.fromDateTime(at).format(context)}. Close the '
+      'app — it is silent, so look in the notification shade.',
     );
-    if (mounted) _toast('Test notification sent.');
   }
 
   Future<void> _signOut() async {

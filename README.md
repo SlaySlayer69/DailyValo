@@ -73,6 +73,13 @@ is not called on a cold start — the app is already `resumed` when the observer
 is registered — so wiring it to resume alone meant launching from the launcher,
 which is how anyone opens the app at two in the morning, checked nothing.
 
+**Testing it.** Settings ▸ *Test the shop notification* queues the real digest a
+minute out through the same `zonedSchedule` call, channel and alarm mode as a
+reset does. The row exists because the intuitive check — set the delivery time
+ten minutes ahead and wait — cannot work: an alarm is armed only when a rotation
+is *detected*, and that happens once a day. Nothing arrives, and the honest
+conclusion from outside is that the feature is broken.
+
 **Delivery time.** By default both fire as soon as the rotation is noticed,
 which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
 *Notification time* holds them back to an hour you pick. Detection still happens

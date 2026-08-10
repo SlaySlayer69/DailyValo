@@ -4,6 +4,22 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.0.3
+
+**A test that actually tests something.** Settings ▸ *Test the shop
+notification* now queues your real digest a minute out through the identical
+path the shop reset uses — same alarm call, same channel, same exact-or-inexact
+decision. If it arrives, then permission, channel, timezone, alarm mode and
+Android's power management all work; the only thing left uncovered is detecting
+the rotation itself. It used to post an alerting wishlist notification
+instantly, which proved only that notifications were switched on.
+
+This matters because the obvious way to check — moving the delivery time ten
+minutes ahead — cannot work and looks exactly like a failure. An alarm is only
+armed when a **rotation is detected**, and the shop rotates once a day, so a new
+time changes nothing until tomorrow's reset. Ten minutes of waiting, nothing
+arrives, and the reasonable conclusion is that it is still broken.
+
 ## v3.0.2
 
 **Opening the app was cancelling its own notification.** Two faults that only

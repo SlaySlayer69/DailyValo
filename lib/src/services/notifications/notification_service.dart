@@ -41,6 +41,10 @@ class NotificationService {
   static const int shopNotificationId = 1001;
   static const int wishlistNotificationId = 1002;
 
+  /// The test digest gets its own id so trying it out cannot evict a real
+  /// delivery already queued for the morning.
+  static const int testNotificationId = 1003;
+
   static const AndroidNotificationChannel _shopChannel =
       AndroidNotificationChannel(
         _shopChannelId,
@@ -273,6 +277,39 @@ class NotificationService {
     Log.d('Notify', 'Wishlist alert scheduled for $at');
   }
 
+  /// Queues a real digest a short way out, to prove the delivery path works.
+  ///
+  /// This exists because the obvious way to test the feature does not work and
+  /// looks like a failure when it does not: moving the delivery time ten
+  /// minutes ahead schedules nothing, since an alarm is only ever armed when a
+  /// **rotation is detected**, and the shop rotates once a day. Someone
+  /// checking that way waits ten minutes, gets nothing, and concludes the thing
+  /// is still broken.
+  ///
+  /// Deliberately the same `zonedSchedule` call, the same channel and the same
+  /// exact-or-inexact decision as the real digest, so a success here means
+  /// permission, channel, timezone, alarm mode and Doze all work. The one thing
+  /// it cannot cover is rotation detection.
+  Future<void> scheduleTest({
+    required tz.TZDateTime at,
+    required List<String> offerLabels,
+  }) async {
+    final List<String> labels = offerLabels.isEmpty
+        ? const <String>['Vandal: Prime Vandal', 'Sheriff: Reaver Sheriff']
+        : offerLabels;
+
+    await _plugin.zonedSchedule(
+      id: testNotificationId,
+      title: kAppName,
+      body: _shopBody(labels),
+      scheduledDate: at,
+      notificationDetails: _shopDetails(labels),
+      androidScheduleMode: await _scheduleMode(),
+      payload: NotificationPayload.dailyShop,
+    );
+    Log.d('Notify', 'Test notification scheduled for $at');
+  }
+
   /// Drops any pending scheduled delivery.
   ///
   /// Called before scheduling a new one, so a second rotation detected before
@@ -308,7 +345,9 @@ class NotificationService {
           .getActiveNotifications();
       for (final ActiveNotification n in active) {
         final int? id = n.id;
-        if (id == shopNotificationId || id == wishlistNotificationId) {
+        if (id == shopNotificationId ||
+            id == wishlistNotificationId ||
+            id == testNotificationId) {
           await _plugin.cancel(id: id!);
         }
       }
