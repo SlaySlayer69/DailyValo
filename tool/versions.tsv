@@ -10,3 +10,14 @@ v1.4.1	f18823fc5cf5c999b2b459963f91540581b11d3e
 v1.5.0	84a715541ffb7e4dcff990051150c1d631a853cf
 v2.0.0	4dbcf8ebdb53a487135f19ee0ea98771dd6652cf
 v2.1.0	1d28cda2ff3fdf31dea2c6da3ed49785220462aa
+v2.2.0	1a529c97917dc29a9f7e5d71e51ea98c02102ca5
+v2.2.1	3cb4a42f7fc52b363049fb100fd9ef05488c1df8
+v2.2.2	dbbdb68dbf3aa8a47195d57caa5b77f79b5907ea
+v3.0.0	be09753a5cc7f19da4af128e1edd51b0cb71877e
+# 3.0.1 to 3.0.4 are the steps of one debugging run, kept as an archive
+# rather than as installs: each one fixed a real fault, and only 3.0.4
+# made the notification arrive. 3.1.0 supersedes all four.
+v3.0.1	120a47f2bf9b8690553d336636e9e30bd5bb4c3e
+v3.0.2	888ee8d2a2ecd86c567132c72e9481060dab36b2
+v3.0.3	b3e4b1dfa273aac018192868c324cf45531e1270
+v3.0.4	836081fb6207f9c69915980153ad2807747fc258
