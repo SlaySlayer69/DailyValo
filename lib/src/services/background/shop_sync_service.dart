@@ -62,7 +62,10 @@ class ShopSyncService {
   Future<ShopSyncOutcome> sync() async {
     if (!_deps.canFetchShop) return ShopSyncOutcome.skip('not signed in');
 
-    final StorefrontSnapshot? previous = _deps.store.cachedSnapshot;
+    // Read *before* the fetch, and from the notification baseline rather than
+    // the shop cache — the fetch below overwrites that cache, and so does every
+    // ordinary tab open.
+    final Set<String>? notified = _lastNotifiedIds();
 
     // `forceRefresh` bypasses the "cached and not expired" shortcut. The worker
     // is only ever woken when something might have changed, so paying for the
@@ -79,8 +82,9 @@ class ShopSyncService {
 
     // First run has no baseline. Record it silently rather than announcing a
     // "new" shop the user has been looking at all day.
-    if (previous == null) {
-      Log.d('Sync', 'No baseline snapshot; recording without notifying');
+    if (notified == null) {
+      Log.d('Sync', 'No baseline; recording without notifying');
+      await _rememberNotified(currentIds);
       return ShopSyncOutcome(
         shopChanged: false,
         wishlistMatches: const <WishlistEntry>[],
@@ -88,7 +92,7 @@ class ShopSyncService {
       );
     }
 
-    final bool changed = !_sameOffers(previous.dailyOfferIds, currentIds);
+    final bool changed = !_sameOffers(notified, currentIds);
     if (!changed) {
       Log.d('Sync', 'Shop unchanged');
       return ShopSyncOutcome(
@@ -105,6 +109,11 @@ class ShopSyncService {
     final List<WishlistEntry> matches = _deps.wishlist.matching(currentIds);
 
     final DateTime? deferredUntil = await _notify(shop, matches);
+
+    // After the notification, never before: a crash or a dead network between
+    // the two would otherwise mark these offers as announced when they were
+    // not, and the next run would see no change and stay quiet forever.
+    await _rememberNotified(currentIds);
 
     return ShopSyncOutcome(
       shopChanged: true,
@@ -181,6 +190,23 @@ class ShopSyncService {
     Log.d('Sync', 'Notifications deferred to $at');
     return at;
   }
+
+  /// The offers the user has already been told about, or null on a device that
+  /// has never been told anything.
+  ///
+  /// Null and empty are kept apart deliberately: null means "no baseline yet",
+  /// which must stay silent, while an empty set would mean "last time the shop
+  /// was empty" and should announce the next one.
+  Set<String>? _lastNotifiedIds() {
+    final List<dynamic>? raw = _deps.localStore.readCachedList(
+      CacheKeys.lastNotifiedOfferIds,
+    );
+    if (raw == null) return null;
+    return raw.whereType<String>().toSet();
+  }
+
+  Future<void> _rememberNotified(Set<String> ids) => _deps.localStore
+      .writeCached(CacheKeys.lastNotifiedOfferIds, ids.toList(growable: false));
 
   /// When the offers we are holding came up.
   ///

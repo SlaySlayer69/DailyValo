@@ -4,6 +4,28 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.0.2
+
+**Opening the app was cancelling its own notification.** Two faults that only
+show up together, and together they made the digest impossible to receive on
+exactly the night you cared enough to look.
+
+*The app ate its own rotation.* "Have I already mentioned these four offers?"
+was answered from the shop cache — and that cache is overwritten by every
+fetch, including the one the Daily Shop tab makes the instant you open the app.
+Opening the app at 02:00 to see the new shop wrote the new offers into the
+baseline before anything had compared against them. The rotation was consumed
+silently, and the notification for it could never fire, that night or later.
+What the user has been *told about* is now tracked separately from what the app
+has *fetched*, and it is written only after the notification has actually gone
+out.
+
+*A cold start ran no check at all.* The rotation check was wired to the "app
+came back to the foreground" callback, which Android does not send when the app
+is launched fresh — by then it is already in the foreground. Starting the app
+from the launcher, which is how anyone opens it at two in the morning, therefore
+checked nothing. It now runs on first frame as well as on resume.
+
 ## v3.0.1
 
 **The notifications that never arrived.** Four separate faults, each of which

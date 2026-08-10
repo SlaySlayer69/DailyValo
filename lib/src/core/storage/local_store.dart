@@ -138,6 +138,7 @@ class LocalStore {
   /// kept — it is public, expensive to fetch, and identical for every account.
   Future<void> clearUserData() async {
     await _cache.delete(CacheKeys.lastShopSnapshot);
+    await _cache.delete(CacheKeys.lastNotifiedOfferIds);
     await _cache.delete(CacheKeys.ownedSkinLevels);
     await _cache.delete(CacheKeys.playerProfile);
   }

@@ -33,6 +33,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // A cold start never produces a lifecycle callback: the app is already
+    // `resumed` by the time this observer is registered, so nothing is
+    // dispatched. Without this, launching the app fresh — which is exactly what
+    // opening it at 02:00 to look at the new shop is — ran no sync at all, and
+    // the rotation went unnoticed while the Daily Shop tab happily displayed it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOnResume());
   }
 
   @override

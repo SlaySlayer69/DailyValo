@@ -56,6 +56,23 @@ Separate channels mean a user can silence the daily digest and keep the
 wishlist alert from Android's own settings, with no in-app toggle required
 (though there are toggles too, under the header's ⋮ menu).
 
+**What counts as "new".** A rotation is detected by comparing the current offer
+ids against *the ones the user was last told about* — a record with its own
+storage key, written only after a notification has actually gone out. The
+obvious shortcut, comparing against the cached shop, is wrong in a way that is
+invisible until someone complains: that cache is overwritten by every fetch,
+including the one the Daily Shop tab makes when the app opens. Opening the app
+at 02:00 to look at the fresh shop wrote the new offers into the baseline before
+anything compared against them, so the rotation was consumed silently and its
+notification could never fire. `test/notification_baseline_test.dart` pins the
+separation, including that a cache write leaves the baseline alone and that
+"never notified" stays distinguishable from "notified about an empty shop".
+
+The check runs on first frame as well as on resume. `didChangeAppLifecycleState`
+is not called on a cold start — the app is already `resumed` when the observer
+is registered — so wiring it to resume alone meant launching from the launcher,
+which is how anyone opens the app at two in the morning, checked nothing.
+
 **Delivery time.** By default both fire as soon as the rotation is noticed,
 which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
 *Notification time* holds them back to an hour you pick. Detection still happens
@@ -139,7 +156,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 199 unit tests, no device needed
+flutter test                # 208 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -360,7 +377,7 @@ nothing arrived.
 
 ## Testing
 
-199 unit tests, no device or network required:
+208 unit tests, no device or network required:
 
 ```
 test/
@@ -372,6 +389,8 @@ test/
 │                                   bundle contents, separate reset clocks
 ├── wishlist_repository_test.dart   Hive persistence and shop matching
 ├── notification_format_test.dart   Locks in the two notification body formats
+├── notification_schedule_test.dart Delivery time: rotation-anchored, real DST days
+├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection
