@@ -11,15 +11,17 @@ import '../../core/utils/logger.dart';
 /// The app name, used verbatim as the notification title.
 const String kAppName = 'DailyValo';
 
-/// Local notifications, in two deliberately different flavours.
+/// Local notifications, on two channels.
 ///
-/// **Daily shop (silent).** Fires when the four offers rotate. It is
-/// informational — you did not ask to be woken at 02:00 for it — so it goes out
-/// on a `Importance.low` channel with no sound, no vibration and no heads-up
-/// banner. It still lands in the shade, which is the point.
+/// **Daily shop.** Fires when the four offers rotate: sound, vibration and a
+/// heads-up banner. It was silent originally, on the reasoning that nobody asks
+/// to be woken at 02:00 for a shop digest — but a delivery time is exactly the
+/// setting that makes that reasoning obsolete. Someone who has chosen 09:30
+/// wants to be told at 09:30, and a silent notification is one you find later
+/// or not at all.
 ///
-/// **Wishlist (alert).** Fires only when something you are actually waiting for
-/// shows up. High importance, sound, vibration, heads-up.
+/// **Wishlist.** Fires only when something you are actually waiting for shows
+/// up. Same treatment, kept separate on purpose.
 ///
 /// They are separate *channels*, not just separate payloads, because Android
 /// lets the user tune each independently — someone can silence the daily digest
@@ -33,7 +35,20 @@ class NotificationService {
   bool _initialised = false;
 
   // --- Channels --------------------------------------------------------------
-  static const String _shopChannelId = 'dv_daily_shop';
+
+  /// Note the `_v2`. A channel's importance, sound and vibration are fixed the
+  /// moment Android first sees it: `createNotificationChannel` on an existing
+  /// id is a no-op, deliberately, so that an app cannot un-silence itself
+  /// behind the user's back. Turning the digest from silent into an alerting
+  /// notification therefore needs a *new* channel — editing the old one in code
+  /// would have changed nothing on any device that had already run the app, and
+  /// the change would have appeared to work only on a fresh install.
+  static const String _shopChannelId = 'dv_daily_shop_v2';
+
+  /// Removed at start-up so the app's settings do not accumulate a dead
+  /// "Daily shop" entry next to the live one.
+  static const String _legacyShopChannelId = 'dv_daily_shop';
+
   static const String _wishlistChannelId = 'dv_wishlist_alert';
 
   /// Stable ids so a re-fired notification replaces the previous one rather
@@ -49,11 +64,10 @@ class NotificationService {
       AndroidNotificationChannel(
         _shopChannelId,
         'Daily shop',
-        description: 'A silent summary of your four daily offers at reset.',
-        importance: Importance.low,
-        playSound: false,
-        enableVibration: false,
-        showBadge: false,
+        description: 'A summary of your four daily offers at reset.',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
       );
 
   static const AndroidNotificationChannel _wishlistChannel =
@@ -91,6 +105,15 @@ class NotificationService {
     if (android != null) {
       await android.createNotificationChannel(_shopChannel);
       await android.createNotificationChannel(_wishlistChannel);
+      // Best-effort: on a device that never had the silent channel this is a
+      // no-op, and a failure here is not worth losing notifications over.
+      try {
+        await android.deleteNotificationChannel(
+          channelId: _legacyShopChannelId,
+        );
+      } on Object catch (e) {
+        Log.d('Notify', 'Could not remove the old shop channel: $e');
+      }
     }
 
     _initialised = true;
@@ -191,12 +214,11 @@ class NotificationService {
         : AndroidScheduleMode.inexactAllowWhileIdle;
   }
 
-  /// The silent daily digest.
+  /// The daily digest.
   ///
-  /// Body format, exactly as specified:
-  /// `Weapon: Skin Name - Weapon: Skin Name - Weapon: Skin Name - Weapon: Skin Name`
+  /// Body format: `Skin Name - Skin Name - Skin Name - Skin Name`.
   ///
-  /// [offerLabels] must already be in `Weapon: Skin` form — see
+  /// [offerLabels] must already be skin names — see
   /// `WeaponSkin.notificationLabel`.
   Future<void> showDailyShop(List<String> offerLabels) async {
     if (offerLabels.isEmpty) return;
@@ -295,7 +317,7 @@ class NotificationService {
     required List<String> offerLabels,
   }) async {
     final List<String> labels = offerLabels.isEmpty
-        ? const <String>['Vandal: Prime Vandal', 'Sheriff: Reaver Sheriff']
+        ? const <String>['Prime Vandal', 'Reaver Sheriff']
         : offerLabels;
 
     await _plugin.zonedSchedule(
@@ -369,15 +391,15 @@ class NotificationService {
         _shopChannelId,
         _shopChannel.name,
         channelDescription: _shopChannel.description,
-        importance: Importance.low,
-        priority: Priority.low,
-        // `silent` suppresses sound *and* the heads-up banner even if the
-        // channel was later loosened by the user.
-        silent: true,
-        playSound: false,
-        enableVibration: false,
-        onlyAlertOnce: true,
-        category: AndroidNotificationCategory.status,
+        // High on both: the channel decides whether a banner is allowed at all,
+        // the priority decides whether this notification uses that allowance.
+        // Either one left low and the digest lands silently in the shade.
+        importance: Importance.high,
+        priority: Priority.high,
+        // Not `onlyAlertOnce`. It suppresses the sound when a notification with
+        // the same id replaces one still showing — which is exactly the case
+        // where yesterday's digest is still in the shade and today's arrives.
+        category: AndroidNotificationCategory.recommendation,
         // Stated rather than left to the defaults, because "how long does it
         // stay?" is a real question about this notification. No `timeoutAfter`:
         // it never expires on its own. Not `ongoing`: a swipe dismisses it.
@@ -385,7 +407,7 @@ class NotificationService {
         // opening the app clears it via `dismissDelivered`.
         autoCancel: true,
         ongoing: false,
-        // Four `Weapon: Skin` pairs do not fit on one collapsed line.
+        // Four skin names do not reliably fit on one collapsed line.
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: kAppName,

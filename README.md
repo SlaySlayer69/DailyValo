@@ -4,8 +4,8 @@ An unofficial Valorant shop and skin tracker for Android, built with Flutter.
 
 DailyValo shows your daily store, the Night Market when one is running, a
 wishlist you can be alerted on, and your skin collection — with full artwork,
-chromas and upgrade levels. It notifies you at shop reset, silently, and only
-buzzes when something you are actually hunting for shows up.
+chromas and upgrade levels. It tells you when your shop rotates, at an hour you
+pick, and separately when something you are actually hunting for shows up.
 
 > DailyValo is not affiliated with, endorsed by, or sponsored by Riot Games. It
 > uses the same undocumented client endpoints the official desktop client uses.
@@ -48,13 +48,22 @@ Two notifications, two Android channels, deliberately different:
 | | Daily shop | Wishlist hit |
 | --- | --- | --- |
 | Fires when | The four offers rotate | A wishlisted skin is among them |
-| Importance | `low` — silent, no heads-up | `high` — sound + vibration |
+| Importance | `high` — sound + vibration | `high` — sound + vibration |
 | Title | `DailyValo` | `DailyValo` |
-| Body | `Vandal: Prime Vandal - Sheriff: Reaver Sheriff - Phantom: Ion - Melee: Karambit` | `An item on your wishlist is in your shop!` |
+| Body | `Prime Vandal - Reaver Sheriff - Ion Phantom - Karambit` | `An item on your wishlist is in your shop!` |
 
 Separate channels mean a user can silence the daily digest and keep the
 wishlist alert from Android's own settings, with no in-app toggle required
 (though there are toggles too, under the header's ⋮ menu).
+
+The digest started out silent, on the reasoning that nobody asks to be woken at
+02:00 for a shop summary. Adding a delivery time retired that reasoning:
+somebody who has chosen 09:30 wants to hear about it at 09:30, and a silent
+notification is one you find later or not at all. The channel id carries a `_v2`
+suffix because of it — a channel's importance and sound are frozen the moment
+Android first sees it, so re-declaring the old id would have changed nothing on
+any device that had already run the app and the change would have appeared to
+work only on a fresh install. The old channel is deleted at start-up.
 
 **What counts as "new".** A rotation is detected by comparing the current offer
 ids against *the ones the user was last told about* — a record with its own
@@ -174,7 +183,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 213 unit tests, no device needed
+flutter test                # 214 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -395,7 +404,7 @@ nothing arrived.
 
 ## Testing
 
-213 unit tests, no device or network required:
+214 unit tests, no device or network required:
 
 ```
 test/

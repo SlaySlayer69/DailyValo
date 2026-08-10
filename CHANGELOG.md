@@ -4,6 +4,24 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.1.0
+
+**The shop notification has a sound and a banner now.** It was deliberately
+silent — nobody asks to be woken at 02:00 for a shop summary — but choosing a
+delivery time retires that argument entirely. If you have set it to 09:30, you
+want to hear about it at 09:30; a silent notification is one you find later, or
+never.
+
+The wishlist alert is unchanged and still on its own channel, so you can turn
+either one down from Android's notification settings without touching the other.
+
+**No more repeating the weapon.** The body read *Vandal: Prime Vandal - Sheriff:
+Reaver Sheriff*, which named each weapon twice — Riot already names skins after
+the weapon they are for. Now it is just *Prime Vandal - Reaver Sheriff - Ion
+Phantom - Karambit*: shorter, and what is left is the part that actually differs
+from yesterday. It reads best on melee, where the old form managed to say
+"Melee:" and then name the actual knife.
+
 ## v3.0.4
 
 **Scheduled notifications were never being delivered.** Not late, not

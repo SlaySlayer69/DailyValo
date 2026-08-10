@@ -221,7 +221,7 @@ class ShopSyncService {
     return rotated.isAfter(now) ? now : rotated;
   }
 
-  /// `Vandal: Prime` for each offer, in shop order.
+  /// `Prime Vandal` for each offer, in shop order.
   ///
   /// Falls back to the raw catalogue lookup when an offer could not be resolved
   /// into a full [ShopOffer]; if even that fails the entry is dropped rather

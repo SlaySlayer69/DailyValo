@@ -9,7 +9,7 @@ import 'support/fixtures.dart';
 /// Locks in the notification body formats, which are part of the product spec
 /// rather than an implementation detail:
 ///
-///   Daily shop: `Weapon: Skin Name - Weapon: Skin Name - ...`
+///   Daily shop: `Skin Name - Skin Name - ...`
 ///   Wishlist:   `An item on your wishlist is in your shop!`
 void main() {
   final ContentCatalog catalog = Fixtures.catalog();
@@ -19,7 +19,7 @@ void main() {
   );
 
   group('Daily shop notification body', () {
-    test('is Weapon: Skin pairs joined with " - "', () {
+    test('is skin names joined with " - "', () {
       final Shop shop = Shop.resolve(snapshot: snapshot, catalog: catalog);
       final String body = shop.dailyOffers
           .map((ShopOffer o) => o.skin.notificationLabel)
@@ -27,9 +27,22 @@ void main() {
 
       expect(
         body,
-        'Vandal: Prime Vandal - Sheriff: Reaver Sheriff - '
-        'Melee: Glitchpop Dagger',
+        'Prime Vandal - Reaver Sheriff - Glitchpop Dagger',
       );
+    });
+
+    test('does not repeat the weapon the skin is already named after', () {
+      // The prefixed form read "Vandal: Prime Vandal" — the weapon twice in
+      // five words, four times over in one notification, crowding out the part
+      // that actually distinguishes one shop from another.
+      final Shop shop = Shop.resolve(snapshot: snapshot, catalog: catalog);
+      for (final ShopOffer offer in shop.dailyOffers) {
+        expect(
+          offer.skin.notificationLabel,
+          isNot(startsWith('${offer.skin.weaponName}:')),
+        );
+        expect(offer.skin.notificationLabel, offer.skin.displayName);
+      }
     });
 
     test('preserves the order Riot returned the offers in', () {

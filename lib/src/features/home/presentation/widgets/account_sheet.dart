@@ -84,7 +84,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               ),
               title: const Text('Daily shop notification'),
               subtitle: const Text(
-                'Silent summary of your four offers at reset',
+                'Summary of your four offers at reset',
               ),
               contentPadding: EdgeInsets.zero,
             ),
@@ -313,8 +313,8 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     // only arrives while you are looking at the app proves nothing about a
     // phone asleep at 09:30.
     _toast(
-      'Queued for ${TimeOfDay.fromDateTime(at).format(context)}. Close the '
-      'app — it is silent, so look in the notification shade.',
+      'Queued for ${TimeOfDay.fromDateTime(at).format(context)}. '
+      'Close the app to see it arrive the way it will in the morning.',
     );
   }
 
