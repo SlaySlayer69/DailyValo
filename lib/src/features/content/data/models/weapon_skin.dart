@@ -204,8 +204,13 @@ class WeaponSkin {
   /// never sold, so they are filtered out of pickers.
   bool get isPurchasable => contentTierUuid != null;
 
-  /// `Vandal: Prime` — the exact shape the shop notification uses.
-  String get notificationLabel => '$weaponName: $displayName';
+  /// `Prime Vandal` — the exact shape the shop notification uses.
+  ///
+  /// The skin name alone, without a `Vandal:` prefix. Riot names weapon skins
+  /// after the weapon they are for, so the prefixed form read *Vandal: Prime
+  /// Vandal* — the weapon twice in five words, four times over in one
+  /// notification, crowding out the only part that carries information.
+  String get notificationLabel => displayName;
 
   factory WeaponSkin.fromJson(
     Map<String, dynamic> json, {

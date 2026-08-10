@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/storage/local_store.dart';
+import '../../../../features/store/data/models/shop.dart';
 import '../../../../services/background/shop_sync_service.dart';
 import '../../../../services/diagnostics/connection_diagnostics.dart';
 import '../../../../services/notifications/notification_schedule.dart';
@@ -82,7 +84,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               ),
               title: const Text('Daily shop notification'),
               subtitle: const Text(
-                'Silent summary of your four offers at reset',
+                'Summary of your four offers at reset',
               ),
               contentPadding: EdgeInsets.zero,
             ),
@@ -101,8 +103,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
 
             SwitchListTile.adaptive(
               value: schedule.enabled,
-              onChanged: (bool value) =>
-                  _setSetting(SettingKeys.notifyAtFixedTime, value),
+              onChanged: _setFixedTime,
               title: const Text('Notification time'),
               subtitle: Text(
                 schedule.enabled
@@ -156,9 +157,10 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               onTap: _busy ? null : _sendTestNotification,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Send a test notification'),
+              title: const Text('Test the shop notification'),
               subtitle: const Text(
-                'Confirms notifications are allowed on this device',
+                'Queues your real digest a minute from now, the same way the '
+                'shop reset does',
               ),
             ),
 
@@ -190,6 +192,32 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   Future<void> _setSetting(String key, bool value) async {
     await ref.read(localStoreProvider).putSetting(key, value);
     if (mounted) setState(() {});
+  }
+
+  /// Turning the delivery time on is the first moment the app has a time to be
+  /// punctual about, so it is the right moment — and the only honest one — to
+  /// ask for the permission that makes it punctual.
+  ///
+  /// A refusal is not an error: the notification still arrives, batched into
+  /// the next window Android is willing to wake for, which can be twenty
+  /// minutes late. Say so once instead of letting it look broken.
+  Future<void> _setFixedTime(bool value) async {
+    await _setSetting(SettingKeys.notifyAtFixedTime, value);
+    if (!value) return;
+
+    final NotificationService notifications = ref.read(
+      notificationServiceProvider,
+    );
+    if (await notifications.canScheduleExactly()) return;
+    await notifications.requestExactScheduling();
+
+    if (!mounted) return;
+    if (!await notifications.canScheduleExactly() && mounted) {
+      _toast(
+        'Without the alarms & reminders permission your notification can '
+        'arrive up to about 20 minutes late.',
+      );
+    }
   }
 
   Future<void> _pickTime(NotificationSchedule schedule) async {
@@ -261,10 +289,33 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       }
       return;
     }
-    await notifications.showWishlistHit(
-      matchedLabels: const <String>['Vandal: Prime'],
+    // The real offers, so the test shows exactly what the morning would.
+    final Shop? shop = ref.read(shopControllerProvider).valueOrNull;
+    final List<String> labels =
+        shop?.dailyOffers
+            .map((ShopOffer o) => o.skin.notificationLabel)
+            .toList(growable: false) ??
+        const <String>[];
+
+    final tz.TZDateTime at = tz.TZDateTime.now(
+      tz.local,
+    ).add(const Duration(minutes: 1));
+
+    try {
+      await notifications.scheduleTest(at: at, offerLabels: labels);
+    } on Object catch (e) {
+      if (mounted) _toast('Could not queue the test: $e');
+      return;
+    }
+
+    if (!mounted) return;
+    // Says to close the app because that is the interesting part: a digest that
+    // only arrives while you are looking at the app proves nothing about a
+    // phone asleep at 09:30.
+    _toast(
+      'Queued for ${TimeOfDay.fromDateTime(at).format(context)}. '
+      'Close the app to see it arrive the way it will in the morning.',
     );
-    if (mounted) _toast('Test notification sent.');
   }
 
   Future<void> _signOut() async {

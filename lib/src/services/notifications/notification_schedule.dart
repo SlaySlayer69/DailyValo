@@ -91,6 +91,37 @@ class NotificationSchedule {
     );
   }
 
+  /// When the digest for a shop that rotated at [rotatedAt] should be
+  /// delivered, given it is now [now].
+  ///
+  /// Null means **post it immediately**, for either of two reasons: the
+  /// schedule is off, or the chosen time for this rotation has already gone by.
+  ///
+  /// That second case is not a corner: the shop rotates at 00:00 UTC — 02:00
+  /// here — and the check that notices is a background worker Android is free
+  /// to defer for hours while the phone is asleep in Doze. Taking the delivery
+  /// time from *now* rather than from the rotation meant a worker that finally
+  /// ran at 09:30 scheduled the 09:00 digest for 09:00 **tomorrow**, and the
+  /// day it was actually about passed in silence. Anchoring to the rotation
+  /// keeps "the 09:00 delivery of today's shop" a fixed instant no matter when
+  /// we get around to noticing.
+  tz.TZDateTime? deliveryFor({
+    required tz.TZDateTime rotatedAt,
+    required tz.TZDateTime now,
+  }) {
+    if (!enabled) return null;
+
+    // A rotation cannot be in the future; if the reset time we were handed says
+    // otherwise, trust the clock rather than scheduling a day out on bad data.
+    final tz.TZDateTime from = rotatedAt.isAfter(now) ? now : rotatedAt;
+
+    final tz.TZDateTime target = nextDeliveryAfter(from);
+    // Not `isBefore`: `zonedSchedule` rejects a date that is not strictly in
+    // the future, and a target landing on this exact instant is due anyway.
+    if (!target.isAfter(now)) return null;
+    return target;
+  }
+
   NotificationSchedule copyWith({bool? enabled, int? minuteOfDay}) =>
       NotificationSchedule(
         enabled: enabled ?? this.enabled,

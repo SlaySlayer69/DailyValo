@@ -31,8 +31,21 @@ abstract final class CacheKeys {
   static const String currentActUuid = 'content.currentAct';
   static const String currentActFetchedAt = 'content.currentAct.fetchedAt';
 
-  /// Last storefront the background worker saw — used to detect a shop reset.
+  /// Most recent storefront, kept so the shop renders offline and instantly on
+  /// launch. Written by *any* fetch, including one the user triggered by
+  /// opening the tab.
   static const String lastShopSnapshot = 'shop.lastSnapshot';
+
+  /// The offer ids the user has already been told about.
+  ///
+  /// Deliberately separate from [lastShopSnapshot], which cannot answer this
+  /// question: the shop cache is overwritten by every fetch, including the one
+  /// the Daily Shop tab makes when you open the app. Using it as the "have I
+  /// mentioned these?" baseline meant opening the app shortly after a rotation
+  /// wrote the new offers into the baseline *before* anything compared against
+  /// it — so the rotation was silently consumed and the notification for it
+  /// could never fire. Only [ShopSyncService] writes this one.
+  static const String lastNotifiedOfferIds = 'shop.lastNotifiedOfferIds';
 
   /// Locally cached owned-skin UUIDs so the Collection tab renders offline.
   static const String ownedSkinLevels = 'collection.ownedSkinLevels';

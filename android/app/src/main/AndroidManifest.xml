@@ -15,6 +15,14 @@
          screen went off, instead of being cut mid-flight. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- Delivering a notification at the minute the user picked. Without it,
+         Android batches the alarm into the next Doze maintenance window, so a
+         digest set for 09:00 arrives whenever the phone next wakes up. Denied
+         by default on Android 14+ and requested only once a delivery time has
+         actually been chosen; the app falls back to an inexact alarm if the
+         user says no. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+
     <application
         android:label="DailyValo"
         android:name="${applicationName}"
@@ -43,6 +51,34 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- Delivery of every scheduled notification.
+             `zonedSchedule` hands AlarmManager a PendingIntent aimed at this
+             receiver. Without the declaration the alarm is still registered —
+             it shows up in `pendingNotificationRequests` and looks perfectly
+             healthy — but when it fires there is nothing to deliver the
+             broadcast to, and it is dropped in silence. Immediate `show()`
+             calls are unaffected, which is why notifications appeared to work
+             right up until a delivery time was set.
+             The plugin stopped declaring these in its own manifest in v16; the
+             app has to. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+
+        <!-- Re-arms pending alarms after a reboot or an app update. AlarmManager
+             forgets everything on both, so without this a phone restarted
+             overnight loses its morning digest. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

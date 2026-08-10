@@ -75,9 +75,10 @@ void main() {
 
   group('WeaponSkin', () {
     test('builds the exact label the shop notification uses', () {
-      expect(Fixtures.primeVandal().notificationLabel, 'Vandal: Prime Vandal');
-      expect(Fixtures.glitchpopKnife().notificationLabel,
-          'Melee: Glitchpop Dagger');
+      expect(Fixtures.primeVandal().notificationLabel, 'Prime Vandal');
+      // Melee is the case the weapon prefix was least useful for: "Melee:
+      // Glitchpop Dagger" named the category, then the actual weapon.
+      expect(Fixtures.glitchpopKnife().notificationLabel, 'Glitchpop Dagger');
     });
 
     test('prefers a chroma full render as card artwork', () {

@@ -62,7 +62,10 @@ class ShopSyncService {
   Future<ShopSyncOutcome> sync() async {
     if (!_deps.canFetchShop) return ShopSyncOutcome.skip('not signed in');
 
-    final StorefrontSnapshot? previous = _deps.store.cachedSnapshot;
+    // Read *before* the fetch, and from the notification baseline rather than
+    // the shop cache — the fetch below overwrites that cache, and so does every
+    // ordinary tab open.
+    final Set<String>? notified = _lastNotifiedIds();
 
     // `forceRefresh` bypasses the "cached and not expired" shortcut. The worker
     // is only ever woken when something might have changed, so paying for the
@@ -79,8 +82,9 @@ class ShopSyncService {
 
     // First run has no baseline. Record it silently rather than announcing a
     // "new" shop the user has been looking at all day.
-    if (previous == null) {
-      Log.d('Sync', 'No baseline snapshot; recording without notifying');
+    if (notified == null) {
+      Log.d('Sync', 'No baseline; recording without notifying');
+      await _rememberNotified(currentIds);
       return ShopSyncOutcome(
         shopChanged: false,
         wishlistMatches: const <WishlistEntry>[],
@@ -88,7 +92,7 @@ class ShopSyncService {
       );
     }
 
-    final bool changed = !_sameOffers(previous.dailyOfferIds, currentIds);
+    final bool changed = !_sameOffers(notified, currentIds);
     if (!changed) {
       Log.d('Sync', 'Shop unchanged');
       return ShopSyncOutcome(
@@ -105,6 +109,11 @@ class ShopSyncService {
     final List<WishlistEntry> matches = _deps.wishlist.matching(currentIds);
 
     final DateTime? deferredUntil = await _notify(shop, matches);
+
+    // After the notification, never before: a crash or a dead network between
+    // the two would otherwise mark these offers as announced when they were
+    // not, and the next run would see no change and stay quiet forever.
+    await _rememberNotified(currentIds);
 
     return ShopSyncOutcome(
       shopChanged: true,
@@ -140,22 +149,34 @@ class ShopSyncService {
         .map((WishlistEntry e) => e.label)
         .toList(growable: false);
 
-    if (!schedule.enabled) {
+    // In the device's own zone, so "09:00" survives a clock change, and
+    // anchored to the rotation rather than to now — see `deliveryFor`.
+    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+    final tz.TZDateTime? at = schedule.deliveryFor(
+      rotatedAt: _rotationOf(shop, now),
+      now: now,
+    );
+
+    // Unconditionally, before either branch: anything still queued is about the
+    // shop that has just been replaced. Leaving it in place is how an alarm set
+    // under the old settings fires hours later with yesterday's four offers in
+    // it — including after the delivery time is switched back off.
+    await _deps.notifications.cancelScheduled();
+
+    if (at == null) {
       if (wantsShop) await _deps.notifications.showDailyShop(_labelsFor(shop));
       if (wantsWishlist) {
         await _deps.notifications.showWishlistHit(matchedLabels: matchLabels);
       }
+      if (schedule.enabled) {
+        Log.d(
+          'Sync',
+          'Delivery time already passed for this rotation; '
+              'posting now instead of waiting a day',
+        );
+      }
       return null;
     }
-
-    // In the device's own zone, so "09:00" survives a clock change.
-    final tz.TZDateTime at = schedule.nextDeliveryAfter(
-      tz.TZDateTime.now(tz.local),
-    );
-
-    // A second rotation before the first was delivered replaces it, rather
-    // than leaving yesterday's digest queued behind today's.
-    await _deps.notifications.cancelScheduled();
 
     if (wantsShop) {
       await _deps.notifications.scheduleDailyShop(_labelsFor(shop), at);
@@ -170,7 +191,37 @@ class ShopSyncService {
     return at;
   }
 
-  /// `Vandal: Prime` for each offer, in shop order.
+  /// The offers the user has already been told about, or null on a device that
+  /// has never been told anything.
+  ///
+  /// Null and empty are kept apart deliberately: null means "no baseline yet",
+  /// which must stay silent, while an empty set would mean "last time the shop
+  /// was empty" and should announce the next one.
+  Set<String>? _lastNotifiedIds() {
+    final List<dynamic>? raw = _deps.localStore.readCachedList(
+      CacheKeys.lastNotifiedOfferIds,
+    );
+    if (raw == null) return null;
+    return raw.whereType<String>().toSet();
+  }
+
+  Future<void> _rememberNotified(Set<String> ids) => _deps.localStore
+      .writeCached(CacheKeys.lastNotifiedOfferIds, ids.toList(growable: false));
+
+  /// When the offers we are holding came up.
+  ///
+  /// Riot only ever tells us when the *next* reset is, so the one that produced
+  /// this shop is a day earlier. Clamped to [now] so a nonsense countdown
+  /// cannot push the rotation into the future.
+  static tz.TZDateTime _rotationOf(Shop shop, tz.TZDateTime now) {
+    final tz.TZDateTime rotated = tz.TZDateTime.from(
+      shop.dailyResetAt.subtract(const Duration(days: 1)),
+      now.location,
+    );
+    return rotated.isAfter(now) ? now : rotated;
+  }
+
+  /// `Prime Vandal` for each offer, in shop order.
   ///
   /// Falls back to the raw catalogue lookup when an offer could not be resolved
   /// into a full [ShopOffer]; if even that fails the entry is dropped rather

@@ -4,8 +4,8 @@ An unofficial Valorant shop and skin tracker for Android, built with Flutter.
 
 DailyValo shows your daily store, the Night Market when one is running, a
 wishlist you can be alerted on, and your skin collection — with full artwork,
-chromas and upgrade levels. It notifies you at shop reset, silently, and only
-buzzes when something you are actually hunting for shows up.
+chromas and upgrade levels. It tells you when your shop rotates, at an hour you
+pick, and separately when something you are actually hunting for shows up.
 
 > DailyValo is not affiliated with, endorsed by, or sponsored by Riot Games. It
 > uses the same undocumented client endpoints the official desktop client uses.
@@ -48,13 +48,57 @@ Two notifications, two Android channels, deliberately different:
 | | Daily shop | Wishlist hit |
 | --- | --- | --- |
 | Fires when | The four offers rotate | A wishlisted skin is among them |
-| Importance | `low` — silent, no heads-up | `high` — sound + vibration |
+| Importance | `high` — sound + vibration | `high` — sound + vibration |
 | Title | `DailyValo` | `DailyValo` |
-| Body | `Vandal: Prime Vandal - Sheriff: Reaver Sheriff - Phantom: Ion - Melee: Karambit` | `An item on your wishlist is in your shop!` |
+| Body | `Prime Vandal - Reaver Sheriff - Ion Phantom - Karambit` | `An item on your wishlist is in your shop!` |
 
 Separate channels mean a user can silence the daily digest and keep the
 wishlist alert from Android's own settings, with no in-app toggle required
 (though there are toggles too, under the header's ⋮ menu).
+
+The digest started out silent, on the reasoning that nobody asks to be woken at
+02:00 for a shop summary. Adding a delivery time retired that reasoning:
+somebody who has chosen 09:30 wants to hear about it at 09:30, and a silent
+notification is one you find later or not at all. The channel id carries a `_v2`
+suffix because of it — a channel's importance and sound are frozen the moment
+Android first sees it, so re-declaring the old id would have changed nothing on
+any device that had already run the app and the change would have appeared to
+work only on a fresh install. The old channel is deleted at start-up.
+
+**What counts as "new".** A rotation is detected by comparing the current offer
+ids against *the ones the user was last told about* — a record with its own
+storage key, written only after a notification has actually gone out. The
+obvious shortcut, comparing against the cached shop, is wrong in a way that is
+invisible until someone complains: that cache is overwritten by every fetch,
+including the one the Daily Shop tab makes when the app opens. Opening the app
+at 02:00 to look at the fresh shop wrote the new offers into the baseline before
+anything compared against them, so the rotation was consumed silently and its
+notification could never fire. `test/notification_baseline_test.dart` pins the
+separation, including that a cache write leaves the baseline alone and that
+"never notified" stays distinguishable from "notified about an empty shop".
+
+The check runs on first frame as well as on resume. `didChangeAppLifecycleState`
+is not called on a cold start — the app is already `resumed` when the observer
+is registered — so wiring it to resume alone meant launching from the launcher,
+which is how anyone opens the app at two in the morning, checked nothing.
+
+**The receiver.** `zonedSchedule` hands AlarmManager a PendingIntent aimed at
+`ScheduledNotificationReceiver`, which the app must declare itself —
+flutter_local_notifications stopped shipping it in its own manifest in v16.
+Without the declaration the alarm is accepted, stored and listed as pending, and
+then dropped when it fires because there is nothing to deliver the broadcast to.
+Nothing is logged; from Android's side nothing went wrong. Immediate `show()`
+calls never touch that path, so the feature looks healthy until someone sets a
+delivery time. `test/android_manifest_test.dart` asserts both receivers and the
+three permissions are present, because a Dart suite never builds the Android app
+and would otherwise never notice them disappearing.
+
+**Testing it.** Settings ▸ *Test the shop notification* queues the real digest a
+minute out through the same `zonedSchedule` call, channel and alarm mode as a
+reset does. The row exists because the intuitive check — set the delivery time
+ten minutes ahead and wait — cannot work: an alarm is armed only when a rotation
+is *detected*, and that happens once a day. Nothing arrives, and the honest
+conclusion from outside is that the feature is broken.
 
 **Delivery time.** By default both fire as soon as the rotation is noticed,
 which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
@@ -63,9 +107,30 @@ at reset — only the delivery moves, and nothing about the shop changes in
 between, so a held notification is still correct when it arrives. The alarm is
 handed to Android via `zonedSchedule` rather than waking a worker at the chosen
 hour: the OS delivers it whether or not the app gets scheduled, and it survives
-a reboot. It is deliberately an *inexact* alarm — exact ones need
-`SCHEDULE_EXACT_ALARM`, a restricted permission, which is a heavy ask for a shop
-digest that is no worse for being a few minutes late.
+a reboot.
+
+The alarm is **exact when Android permits it and inexact when it does not**.
+`SCHEDULE_EXACT_ALARM` is declared and requested at the moment the delivery time
+is switched on — the only moment the app has a time to be punctual about — and a
+refusal costs punctuality rather than the notification. It matters more than it
+sounds: an inexact alarm is batched into the next Doze maintenance window, so a
+digest set for 09:00 can land at 09:20 on a phone that slept through the night,
+with nothing actually broken. The diagnostics screen reports which of the two is
+in force.
+
+Delivery is anchored to the **rotation**, not to the moment the app noticed it.
+Computing it from *now* meant a background check that Android deferred past the
+chosen hour scheduled the digest for that hour *tomorrow*, and the day it was
+about passed in silence — a phone asleep from 02:00 to 09:20 got nothing at all.
+`deliveryFor` resolves the first occurrence of the chosen wall clock after the
+rotation, and posts immediately when that instant is already behind us.
+
+Nothing sets a timeout on either notification and neither is `ongoing`, so one
+stays in the shade until it is swiped, opened, or cleared by opening the app.
+That last part cancels only ids Android reports as *currently showing*:
+`cancel(id:)` removes a posted notification and a queued alarm under the same
+id alike, so clearing the shade indiscriminately would silently delete the 09:00
+delivery of anyone who opened the app at 08:00.
 
 The chosen time is a **wall clock in the device's own timezone**, read via
 `flutter_timezone` and resolved against the IANA database. That is not
@@ -118,7 +183,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 190 unit tests, no device needed
+flutter test                # 214 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -306,6 +371,19 @@ keeps the last segment — silently truncating an opaque token that contains one
 A truncated `ssid` would sign you in once and then quietly break every refresh
 afterwards.
 
+The cookie is re-read on **every app resume**, not just at sign-in, and a stored
+one is enough to rebuild a whole session on its own — `signInWithStoredCookie`
+needs nothing from a previous session, because a session is exactly what a token
+pair plus an entitlements JWT already is. Both of those exist because the
+failure they prevent is close to silent. If the capture at sign-in came back
+empty, or Riot rotated the cookie since, the next refresh fails with
+`requiresReLogin`, the session manager signs you out, and the visible symptom is
+a *Login with Riot* button that signs you straight in again without asking for
+anything — mildly annoying, and easy to live with. What is not visible is that
+`canFetchShop` is now false, so every background run skips, no rotation is ever
+detected, and no notification is ever scheduled. Nothing arrives to tell you
+nothing arrived.
+
 ### Two things worth knowing before you ship this
 
 1. **These endpoints are undocumented.** They are the same ones the official
@@ -326,7 +404,7 @@ afterwards.
 
 ## Testing
 
-190 unit tests, no device or network required:
+214 unit tests, no device or network required:
 
 ```
 test/
@@ -338,6 +416,9 @@ test/
 │                                   bundle contents, separate reset clocks
 ├── wishlist_repository_test.dart   Hive persistence and shop matching
 ├── notification_format_test.dart   Locks in the two notification body formats
+├── notification_schedule_test.dart Delivery time: rotation-anchored, real DST days
+├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
+├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection
