@@ -73,6 +73,17 @@ is not called on a cold start — the app is already `resumed` when the observer
 is registered — so wiring it to resume alone meant launching from the launcher,
 which is how anyone opens the app at two in the morning, checked nothing.
 
+**The receiver.** `zonedSchedule` hands AlarmManager a PendingIntent aimed at
+`ScheduledNotificationReceiver`, which the app must declare itself —
+flutter_local_notifications stopped shipping it in its own manifest in v16.
+Without the declaration the alarm is accepted, stored and listed as pending, and
+then dropped when it fires because there is nothing to deliver the broadcast to.
+Nothing is logged; from Android's side nothing went wrong. Immediate `show()`
+calls never touch that path, so the feature looks healthy until someone sets a
+delivery time. `test/android_manifest_test.dart` asserts both receivers and the
+three permissions are present, because a Dart suite never builds the Android app
+and would otherwise never notice them disappearing.
+
 **Testing it.** Settings ▸ *Test the shop notification* queues the real digest a
 minute out through the same `zonedSchedule` call, channel and alarm mode as a
 reset does. The row exists because the intuitive check — set the delivery time
@@ -163,7 +174,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 208 unit tests, no device needed
+flutter test                # 213 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -384,7 +395,7 @@ nothing arrived.
 
 ## Testing
 
-208 unit tests, no device or network required:
+213 unit tests, no device or network required:
 
 ```
 test/
@@ -398,6 +409,7 @@ test/
 ├── notification_format_test.dart   Locks in the two notification body formats
 ├── notification_schedule_test.dart Delivery time: rotation-anchored, real DST days
 ├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
+├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection

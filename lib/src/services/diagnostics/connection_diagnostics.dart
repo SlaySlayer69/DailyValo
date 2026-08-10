@@ -7,6 +7,7 @@ import '../../features/auth/data/models/riot_session.dart';
 import '../../features/store/data/models/competitive_standing.dart';
 import '../../features/store/data/models/rank_attempt.dart';
 import '../notifications/notification_schedule.dart';
+import '../notifications/notification_service.dart';
 
 /// One probe result.
 class DiagnosticResult {
@@ -249,21 +250,36 @@ class ConnectionDiagnostics {
     final NotificationSchedule schedule = NotificationSchedule.read(
       _deps.localStore,
     );
+    final Set<int> pending = await _deps.notifications.pendingIds();
+
+    // Named, not counted. "1 waiting for 09:30" was shown for a test queued
+    // one minute out, because the line printed the *setting* rather than
+    // anything Android had actually been told — the plugin does not report the
+    // time an alarm is set for. Saying which alarm it is, is the honest limit.
+    final List<String> waiting = <String>[
+      if (pending.contains(NotificationService.shopNotificationId))
+        'shop digest',
+      if (pending.contains(NotificationService.wishlistNotificationId))
+        'wishlist alert',
+      if (pending.contains(NotificationService.testNotificationId)) 'test',
+    ];
+
     if (!schedule.enabled) {
-      return const DiagnosticResult(
+      return DiagnosticResult(
         'Queued notifications',
         ok: true,
-        detail: 'Not applicable — delivery is immediate',
+        detail: waiting.isEmpty
+            ? 'None — delivery is immediate, so nothing waits'
+            : 'Waiting: ${waiting.join(', ')}',
       );
     }
 
-    final int pending = await _deps.notifications.pendingCount();
     return DiagnosticResult(
       'Queued notifications',
-      ok: pending > 0,
-      detail: pending > 0
-          ? '$pending waiting for ${schedule.label}'
-          : 'None queued — nothing has detected a shop rotation yet',
+      ok: waiting.isNotEmpty,
+      detail: waiting.isEmpty
+          ? 'None queued — nothing has detected a shop rotation yet'
+          : 'Waiting: ${waiting.join(', ')} (delivery set to ${schedule.label})',
     );
   }
 

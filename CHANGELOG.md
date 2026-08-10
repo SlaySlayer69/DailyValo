@@ -4,6 +4,33 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.0.4
+
+**Scheduled notifications were never being delivered.** Not late, not
+suppressed — dropped, by Android, with no trace anywhere.
+
+Setting an alarm hands Android a pointer to the component that should receive
+it when it fires. That component was not declared in the app, so the alarm was
+accepted, stored, and listed as pending — the app's own diagnostics correctly
+reported one waiting — and when the moment came there was nothing to hand it to.
+Nothing was shown, and nothing was logged, because from Android's point of view
+nothing went wrong.
+
+Notifications sent *immediately* never went through that path, which is why the
+feature looked healthy for as long as delivery happened at the reset itself, and
+failed the moment a delivery time was chosen. The notification library stopped
+declaring the component on an app's behalf several versions ago; DailyValo now
+declares it, along with the one that re-arms pending alarms after a reboot or an
+app update — so a phone restarted overnight keeps its morning digest.
+
+A test now checks the manifest for both, since a Dart test suite never builds
+the Android app and nothing else in it would notice them going missing again.
+
+*Diagnostics* names which alarm is queued instead of counting them. It reported
+"1 waiting for 09:30" for a test queued one minute out, because the line printed
+the setting rather than anything Android had been told — the library does not
+expose the time an alarm is set for, so naming the alarm is the honest limit.
+
 ## v3.0.3
 
 **A test that actually tests something.** Settings ▸ *Test the shop

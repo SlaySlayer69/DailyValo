@@ -422,14 +422,23 @@ class NotificationService {
   /// The difference between "the alarm was never set" and "the alarm was set
   /// and did not arrive" is otherwise invisible, and they have completely
   /// different causes.
-  Future<int> pendingCount() async {
+  Future<int> pendingCount() async => (await pendingIds()).length;
+
+  /// The ids Android is holding.
+  ///
+  /// Ids rather than a bare count, because the count alone is ambiguous in a
+  /// way that misleads: a queued *test* and a queued morning digest both read
+  /// as "1 waiting", and the plugin does not expose the time an alarm is set
+  /// for, so the delivery time cannot be reported back either. Naming which
+  /// one it is, is the most that can honestly be said.
+  Future<Set<int>> pendingIds() async {
     try {
       final List<PendingNotificationRequest> pending = await _plugin
           .pendingNotificationRequests();
-      return pending.length;
+      return pending.map((PendingNotificationRequest r) => r.id).toSet();
     } on Object catch (e) {
       Log.e('Notify', 'Could not read pending notifications', e);
-      return 0;
+      return const <int>{};
     }
   }
 

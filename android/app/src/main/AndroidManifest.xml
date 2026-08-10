@@ -52,6 +52,34 @@
             </intent-filter>
         </activity>
 
+        <!-- Delivery of every scheduled notification.
+             `zonedSchedule` hands AlarmManager a PendingIntent aimed at this
+             receiver. Without the declaration the alarm is still registered —
+             it shows up in `pendingNotificationRequests` and looks perfectly
+             healthy — but when it fires there is nothing to deliver the
+             broadcast to, and it is dropped in silence. Immediate `show()`
+             calls are unaffected, which is why notifications appeared to work
+             right up until a delivery time was set.
+             The plugin stopped declaring these in its own manifest in v16; the
+             app has to. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+
+        <!-- Re-arms pending alarms after a reboot or an app update. AlarmManager
+             forgets everything on both, so without this a phone restarted
+             overnight loses its morning digest. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
