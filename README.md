@@ -100,6 +100,22 @@ ten minutes ahead and wait — cannot work: an alarm is armed only when a rotati
 is *detected*, and that happens once a day. Nothing arrives, and the honest
 conclusion from outside is that the feature is broken.
 
+**Watching the watcher.** The nightly check runs in its own isolate, in a
+process nobody sees, at a time Android chooses — so when a notification does not
+arrive there is nothing to look at. "The check never ran", "it ran and could not
+sign in", "it ran and found nothing new" and "it ran and its alarm was dropped"
+are the same silence and have nothing in common as problems. The worker
+therefore records every run — time, count, outcome or exception — before and
+after the work, and the diagnostics screen reads it back. The count discriminates
+the one case the app cannot fix: zero runs after a night means Android is not
+starting the task, which is battery optimisation, reported on the same screen
+with a shortcut to the system setting that lifts it.
+
+The dispatcher calls `DartPluginRegistrant.ensureInitialized()`. WorkManager
+builds a `FlutterEngine`, which brings up the Android-side plugin registrant but
+not the Dart-side one, and a plugin missing there throws on first use — killing
+the run before it can schedule anything, without a trace.
+
 **Delivery time.** By default both fire as soon as the rotation is noticed,
 which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
 *Notification time* holds them back to an hour you pick. Detection still happens
@@ -183,7 +199,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 214 unit tests, no device needed
+flutter test                # 221 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -404,7 +420,7 @@ nothing arrived.
 
 ## Testing
 
-214 unit tests, no device or network required:
+221 unit tests, no device or network required:
 
 ```
 test/
@@ -419,6 +435,7 @@ test/
 ├── notification_schedule_test.dart Delivery time: rotation-anchored, real DST days
 ├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
 ├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
+├── background_run_log_test.dart    The worker's own record of what it did
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection

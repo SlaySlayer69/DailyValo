@@ -6,6 +6,7 @@ import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/constants/storage_keys.dart';
+import '../../../../core/platform/battery_optimisation.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../features/store/data/models/shop.dart';
 import '../../../../services/background/shop_sync_service.dart';
@@ -145,6 +146,16 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
                   : null,
             ),
             ListTile(
+              onTap: _busy ? null : _openBatterySettings,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.battery_saver_outlined),
+              title: const Text('Allow background checks'),
+              subtitle: const Text(
+                'Set DailyValo to Unrestricted so the shop check can run '
+                'overnight',
+              ),
+            ),
+            ListTile(
               onTap: _busy ? null : _runDiagnostics,
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.monitor_heart_outlined),
@@ -259,6 +270,21 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       if (mounted) _toast('Check failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sends the user to the system screen that lifts battery optimisation.
+  ///
+  /// The app cannot grant this itself, and it is the one setting that can stop
+  /// the nightly check without anything in the app looking wrong.
+  Future<void> _openBatterySettings() async {
+    const BatteryOptimisation power = BatteryOptimisation();
+    if (await power.isExempt() == true) {
+      if (mounted) _toast('Already unrestricted — background checks can run.');
+      return;
+    }
+    if (!await power.openSettings() && mounted) {
+      _toast('Could not open the settings screen on this device.');
     }
   }
 

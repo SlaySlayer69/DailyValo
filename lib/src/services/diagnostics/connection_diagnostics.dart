@@ -3,9 +3,11 @@ import 'package:dio/dio.dart';
 import '../../app/dependencies.dart';
 import '../../core/constants/riot_constants.dart';
 import '../../core/constants/storage_keys.dart';
+import '../../core/platform/battery_optimisation.dart';
 import '../../features/auth/data/models/riot_session.dart';
 import '../../features/store/data/models/competitive_standing.dart';
 import '../../features/store/data/models/rank_attempt.dart';
+import '../background/background_run_log.dart';
 import '../notifications/notification_schedule.dart';
 import '../notifications/notification_service.dart';
 
@@ -154,8 +156,82 @@ class ConnectionDiagnostics {
     results.add(await _scheduledCheck());
     results.add(await _permissionCheck());
     results.add(await _exactAlarmCheck());
+    results.add(_lastRunCheck());
+    results.add(await _batteryCheck());
 
     return results;
+  }
+
+  /// Whether Android is *allowed* to run the background check.
+  ///
+  /// Paired with the line above on purpose. "Never run" plus "optimised" is a
+  /// complete diagnosis and the fix is two taps in system settings; "never run"
+  /// plus "exempt" means something else entirely and the app has a bug.
+  Future<DiagnosticResult> _batteryCheck() async {
+    final bool? exempt = await const BatteryOptimisation().isExempt();
+    if (exempt == null) {
+      return const DiagnosticResult(
+        'Battery optimisation',
+        ok: false,
+        detail: 'Could not be read',
+      );
+    }
+    return DiagnosticResult(
+      'Battery optimisation',
+      ok: exempt,
+      detail: exempt
+          ? 'Unrestricted — background checks may run'
+          : 'Restricted — Android may never start the nightly check',
+    );
+  }
+
+  /// Whether Android has actually been starting the background check.
+  ///
+  /// Everything else on this screen describes the app's own state; this is the
+  /// one line about a thing the app does not control. A notification that
+  /// depends on a nightly worker has two completely different failure modes —
+  /// the worker never ran, or it ran and something went wrong — and they are
+  /// indistinguishable from the outside. Zero runs after a night points at
+  /// battery optimisation or app standby, which no amount of code here fixes.
+  DiagnosticResult _lastRunCheck() {
+    final BackgroundRunLog? log = BackgroundRunLog.read(_deps.localStore);
+    if (log == null) {
+      return const DiagnosticResult(
+        'Background check',
+        ok: false,
+        detail: 'Never run — Android has not started it since install',
+      );
+    }
+
+    final String when = _shortTime(log.at);
+    if (!log.finished) {
+      return DiagnosticResult(
+        'Background check',
+        ok: false,
+        detail:
+            'Started $when and never finished (run ${log.runs}) — killed '
+            'partway through',
+      );
+    }
+
+    return DiagnosticResult(
+      'Background check',
+      ok: log.outcome == BackgroundRunLog.ok,
+      detail: '$when, run ${log.runs}: ${log.detail ?? log.outcome}',
+    );
+  }
+
+  static String _shortTime(DateTime at) {
+    final DateTime local = at.toLocal();
+    final String hhmm =
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+    final DateTime today = DateTime.now();
+    final bool sameDay =
+        local.year == today.year &&
+        local.month == today.month &&
+        local.day == today.day;
+    return sameDay ? hhmm : '${local.day}.${local.month}. $hhmm';
   }
 
   /// Whether Android will show anything we post at all.
