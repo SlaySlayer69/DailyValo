@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app/providers.dart';
@@ -8,9 +12,11 @@ import '../../../../app/theme/app_theme.dart';
 import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/platform/battery_optimisation.dart';
 import '../../../../core/storage/local_store.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../features/store/data/models/shop.dart';
 import '../../../../services/background/shop_sync_service.dart';
 import '../../../../services/diagnostics/connection_diagnostics.dart';
+import '../../../../services/logging/log_file.dart';
 import '../../../../services/notifications/notification_schedule.dart';
 import '../../../../services/notifications/notification_service.dart';
 
@@ -41,6 +47,21 @@ class AccountSheet extends ConsumerStatefulWidget {
 class _AccountSheetState extends ConsumerState<AccountSheet> {
   bool _busy = false;
 
+  /// Shown next to the export row so "is anything actually being recorded?" is
+  /// answerable without exporting first.
+  int _logSize = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshLogSize();
+  }
+
+  Future<void> _refreshLogSize() async {
+    final int size = await (await LogFile.open())?.sizeInBytes() ?? 0;
+    if (mounted) setState(() => _logSize = size);
+  }
+
   @override
   Widget build(BuildContext context) {
     final LocalStore store = ref.watch(localStoreProvider);
@@ -55,6 +76,14 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       true,
     );
     final NotificationSchedule schedule = NotificationSchedule.read(store);
+    final bool developerMode = store.setting<bool>(
+      SettingKeys.developerMode,
+      false,
+    );
+    final bool logging = store.setting<bool>(
+      SettingKeys.verboseLogging,
+      false,
+    );
 
     return SafeArea(
       // The sheet sizes itself to the content, but a small screen or a large
@@ -155,25 +184,74 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
                 'overnight',
               ),
             ),
-            ListTile(
-              onTap: _busy ? null : _runDiagnostics,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.monitor_heart_outlined),
-              title: const Text('Diagnostics'),
+
+            const Divider(height: AppSpacing.xl),
+
+            SwitchListTile.adaptive(
+              value: developerMode,
+              onChanged: (bool value) =>
+                  _setSetting(SettingKeys.developerMode, value),
+              title: const Text('Developer mode'),
               subtitle: const Text(
-                'Checks each Riot endpoint and shows what it returned',
+                'Diagnostics, the notification test and a detailed log',
               ),
-            ),
-            ListTile(
-              onTap: _busy ? null : _sendTestNotification,
+              secondary: const Icon(Icons.code_rounded),
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Test the shop notification'),
-              subtitle: const Text(
-                'Queues your real digest a minute from now, the same way the '
-                'shop reset does',
-              ),
             ),
+
+            if (developerMode) ...<Widget>[
+              ListTile(
+                onTap: _busy ? null : _runDiagnostics,
+                contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+                leading: const Icon(Icons.monitor_heart_outlined, size: 20),
+                title: const Text('Diagnostics'),
+                subtitle: const Text(
+                  'Checks each Riot endpoint and shows what it returned',
+                ),
+              ),
+              ListTile(
+                onTap: _busy ? null : _sendTestNotification,
+                contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+                leading: const Icon(
+                  Icons.notifications_active_outlined,
+                  size: 20,
+                ),
+                title: const Text('Test the shop notification'),
+                subtitle: const Text(
+                  'Queues your real digest a minute from now, the same way '
+                  'the shop reset does',
+                ),
+              ),
+              SwitchListTile.adaptive(
+                value: logging,
+                onChanged: _setLogging,
+                title: const Text('Detailed log'),
+                subtitle: const Text(
+                  'Records everything the app and the background check do',
+                ),
+                secondary: const Icon(Icons.article_outlined, size: 20),
+                contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+              ),
+              if (logging || _logSize > 0) ...<Widget>[
+                ListTile(
+                  onTap: _busy ? null : _exportLog,
+                  contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+                  leading: const Icon(Icons.ios_share_rounded, size: 20),
+                  title: const Text('Export the log'),
+                  subtitle: Text(
+                    _logSize == 0
+                        ? 'Nothing recorded yet'
+                        : 'Share the ${_prettySize(_logSize)} recorded so far',
+                  ),
+                ),
+                ListTile(
+                  onTap: _busy || _logSize == 0 ? null : _clearLog,
+                  contentPadding: const EdgeInsets.only(left: AppSpacing.xl),
+                  leading: const Icon(Icons.delete_outline_rounded, size: 20),
+                  title: const Text('Clear the log'),
+                ),
+              ],
+            ],
 
             const Divider(height: AppSpacing.xl),
 
@@ -271,6 +349,71 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Turns file logging on or off, and starts it immediately rather than at the
+  /// next launch — the reason someone switches this on is usually that
+  /// something is happening *now*.
+  Future<void> _setLogging(bool value) async {
+    await _setSetting(SettingKeys.verboseLogging, value);
+    if (value) {
+      Log.toFile = await LogFile.open() != null;
+      Log.d('Dev', 'Logging switched on from settings');
+    } else {
+      await LogFile.instance?.flush();
+      Log.toFile = false;
+    }
+    await _refreshLogSize();
+  }
+
+  /// Hands the log to the share sheet as a file.
+  ///
+  /// A file rather than pasted text: these run to thousands of lines, and every
+  /// chat app mangles that. Written to a fresh copy under a dated name so the
+  /// receiving end gets something identifiable rather than `dailyvalo.log`.
+  Future<void> _exportLog() async {
+    setState(() => _busy = true);
+    try {
+      final LogFile? log = await LogFile.open();
+      final String contents = await log?.readAll() ?? '';
+      if (contents.trim().isEmpty) {
+        if (mounted) _toast('The log is empty.');
+        return;
+      }
+
+      final Directory dir = await getTemporaryDirectory();
+      final DateTime now = DateTime.now();
+      final String stamp =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}';
+      final File out = File('${dir.path}/dailyvalo-log-$stamp.txt');
+      await out.writeAsString(contents, flush: true);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: <XFile>[XFile(out.path)],
+          subject: 'DailyValo log $stamp',
+        ),
+      );
+    } on Object catch (e) {
+      if (mounted) _toast('Could not export the log: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clearLog() async {
+    await (await LogFile.open())?.clear();
+    await _refreshLogSize();
+    if (mounted) _toast('Log cleared.');
+  }
+
+  static String _prettySize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   /// Sends the user to the system screen that lifts battery optimisation.

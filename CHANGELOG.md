@@ -4,6 +4,33 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.2.0
+
+**Developer mode.** Diagnostics and the notification test now live behind a
+switch at the bottom of the settings sheet instead of sitting in everyone's way.
+They answer questions most people never ask, and a settings screen that opens
+with debugging tools is a worse settings screen.
+
+**A detailed log.** Switched on inside developer mode, DailyValo records what it
+does — every request and what came back, the shop check, the notification
+scheduling, and every run of the background check with its own `[bg]` tag, since
+that isolate is the part nobody could ever see. Export writes it to a dated file
+and hands it to the share sheet; there is also a size readout, so "is anything
+being recorded?" is answerable without exporting first, and a button to clear it.
+
+Nothing reaches that file without passing through redaction. The log is built to
+be sent to other people, and everything this app talks to is authenticated with
+tokens that work until they expire — the sign-in cookie does not even do that,
+it just mints new ones. Tokens, bearer values and the session cookie are
+stripped at the point of writing rather than at each place that logs, because a
+call site that forgets is exactly how a working credential ends up in a file
+somebody posts publicly. Ten tests cover it, including that a log line with
+nothing sensitive in it survives untouched — over-redaction makes a log useless,
+which is its own kind of failure.
+
+The log is capped and rotates, off by default, and costs one boolean check per
+call when off.
+
 ## v3.1.1
 
 **Making the overnight check visible.** The one-minute test arrives, and the
