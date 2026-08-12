@@ -6,6 +6,7 @@ import 'package:workmanager/workmanager.dart';
 import '../../app/dependencies.dart';
 import '../../core/storage/local_store.dart';
 import '../../core/utils/logger.dart';
+import '../logging/log_file.dart';
 import 'background_run_log.dart';
 import 'shop_sync_service.dart';
 
@@ -99,6 +100,11 @@ void backgroundCallbackDispatcher() {
       // Returning false asks WorkManager to retry with backoff. A transient
       // network blip is exactly the case that deserves one.
       return false;
+    } finally {
+      // This isolate is killed the instant the callback returns, taking any
+      // unflushed log lines with it — and the background run is the part the
+      // log exists for.
+      await LogFile.instance?.flush();
     }
   });
 }

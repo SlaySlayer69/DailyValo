@@ -7,6 +7,7 @@ import 'auth_interceptor.dart';
 import 'client_version.dart';
 import 'error_interceptor.dart';
 import 'json_response_interceptor.dart';
+import 'logging_interceptor.dart';
 import 'riot_session_manager.dart';
 
 /// Builds the three HTTP clients the app needs. They are deliberately separate:
@@ -40,6 +41,7 @@ abstract final class DioFactory {
     dio.interceptors.add(CookieManager(cookieJar ?? CookieJar()));
     dio.interceptors.add(const JsonResponseInterceptor());
     dio.interceptors.add(const ErrorMappingInterceptor());
+    dio.interceptors.add(LoggingInterceptor('auth'));
     return dio;
   }
 
@@ -74,6 +76,9 @@ abstract final class DioFactory {
       ),
     );
     dio.interceptors.add(const ErrorMappingInterceptor());
+    // Last, so it sees the refreshed-and-replayed request rather than the 401
+    // that triggered it — the retry is the interesting part.
+    dio.interceptors.add(LoggingInterceptor('game'));
     return dio;
   }
 
@@ -88,6 +93,7 @@ abstract final class DioFactory {
       ),
     );
     dio.interceptors.add(const ErrorMappingInterceptor());
+    dio.interceptors.add(LoggingInterceptor('content'));
     return dio;
   }
 }

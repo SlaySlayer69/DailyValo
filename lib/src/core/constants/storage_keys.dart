@@ -74,4 +74,16 @@ abstract final class SettingKeys {
   static const String notifyTimeOfDay = 'notify.timeOfDay';
 
   static const String language = 'language';
+
+  /// Reveals the developer tools — diagnostics, the notification test and the
+  /// log. Off by default: they answer questions most people never ask, and a
+  /// settings screen that leads with debugging is a worse settings screen.
+  static const String developerMode = 'dev.enabled';
+
+  /// Writes a detailed log to a file that can be exported.
+  ///
+  /// Read by both isolates, which is why it lives here rather than in memory:
+  /// the background worker has no way to ask the UI whether logging is on, and
+  /// the worker is the part most worth logging.
+  static const String verboseLogging = 'dev.logging';
 }

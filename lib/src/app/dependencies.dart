@@ -16,6 +16,7 @@ import '../features/player/data/repositories/player_repository.dart';
 import '../features/store/data/datasources/riot_store_api.dart';
 import '../features/store/data/repositories/store_repository.dart';
 import '../features/wishlist/data/repositories/wishlist_repository.dart';
+import '../services/logging/log_file.dart';
 import '../services/notifications/notification_service.dart';
 
 /// The application's object graph, built in one place.
@@ -74,6 +75,7 @@ class AppDependencies {
   /// it well before that if it misbehaves.
   static Future<AppDependencies> bootstrap({bool isBackground = false}) async {
     final LocalStore localStore = await LocalStore.init();
+    await _startLogging(localStore, isBackground: isBackground);
     final SecureTokenStore secureStore = SecureTokenStore();
     final ClientVersionHolder clientVersion = ClientVersionHolder.fromCache();
 
@@ -146,6 +148,29 @@ class AppDependencies {
       wishlist: wishlist,
       player: player,
       notifications: notifications,
+    );
+  }
+
+  /// Points the logger at the file, if the user asked for one.
+  ///
+  /// First thing after storage and before anything that talks to the network,
+  /// so a run that fails during start-up is still in the log. Both isolates
+  /// call this; the setting is read from disk rather than passed in, because
+  /// the worker has nobody to pass it.
+  static Future<void> _startLogging(
+    LocalStore store, {
+    required bool isBackground,
+  }) async {
+    Log.isolate = isBackground ? 'bg' : 'ui';
+    if (!store.setting<bool>(SettingKeys.verboseLogging, false)) {
+      Log.toFile = false;
+      return;
+    }
+    Log.toFile = await LogFile.open() != null;
+    Log.d(
+      'Boot',
+      '--- ${isBackground ? 'background' : 'app'} start '
+          '${DateTime.now().toIso8601String()} ---',
     );
   }
 

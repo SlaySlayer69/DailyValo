@@ -100,6 +100,23 @@ ten minutes ahead and wait — cannot work: an alarm is armed only when a rotati
 is *detected*, and that happens once a day. Nothing arrives, and the honest
 conclusion from outside is that the feature is broken.
 
+**Developer mode and the log.** Diagnostics and the notification test sit behind
+a switch at the bottom of settings, together with a detailed log that records
+every request and response, the shop check, notification scheduling, and each
+background run under its own `[bg]` tag. It exports to a dated file through the
+share sheet.
+
+Redaction happens at the sink, not at the call sites. The log exists to be sent
+to someone, and every Riot endpoint is authenticated with a bearer token that
+works until it expires — the `ssid` cookie does not even expire, it mints new
+tokens. JWTs are matched on shape rather than on the field name carrying them,
+so a token in an unexpected payload is caught too, and the mask is a fixed
+string so the length of what was removed does not leak either.
+`test/log_redaction_test.dart` covers the sign-in redirect fragment (which is
+how a whole token set used to arrive in one URL) and, just as deliberately, that
+an ordinary log line comes through unchanged — an over-redacted log is useless,
+which is its own failure.
+
 **Watching the watcher.** The nightly check runs in its own isolate, in a
 process nobody sees, at a time Android chooses — so when a notification does not
 arrive there is nothing to look at. "The check never ran", "it ran and could not
@@ -199,7 +216,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 221 unit tests, no device needed
+flutter test                # 231 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -420,7 +437,7 @@ nothing arrived.
 
 ## Testing
 
-221 unit tests, no device or network required:
+231 unit tests, no device or network required:
 
 ```
 test/
@@ -436,6 +453,7 @@ test/
 ├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
 ├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
 ├── background_run_log_test.dart    The worker's own record of what it did
+├── log_redaction_test.dart         Credentials never reach the exportable log
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection
