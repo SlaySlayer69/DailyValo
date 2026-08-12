@@ -1,5 +1,10 @@
 package com.dailyvalo.dailyvalo
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.webkit.CookieManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,10 +30,13 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CHANNEL = "com.dailyvalo.app/webview_cookies"
+        const val POWER_CHANNEL = "com.dailyvalo.app/power"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        configurePowerChannel(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -62,6 +70,67 @@ class MainActivity : FlutterActivity() {
                         CookieManager.getInstance().flush()
                     }
                     result.success(null)
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /**
+     * Whether Android is willing to run this app's background work, and a way
+     * to change its mind.
+     *
+     * Battery optimisation is the one thing that can stop the nightly shop
+     * check outright, and it does so invisibly: WorkManager accepts the task,
+     * reports it as enqueued, and Android simply never starts it. From inside
+     * the app that is indistinguishable from a task that ran and found nothing
+     * — which is why the answer belongs on the diagnostics screen instead of in
+     * a list of things to try.
+     *
+     * [openSettings] deliberately opens the general list rather than firing
+     * `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`. That direct request needs a
+     * permission Play treats as restricted, and it is not worth holding for a
+     * shop tracker when the same screen is two taps away.
+     */
+    private fun configurePowerChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            POWER_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isIgnoringBatteryOptimizations" -> {
+                    result.success(
+                        runCatching {
+                            val power =
+                                getSystemService(Context.POWER_SERVICE) as PowerManager
+                            power.isIgnoringBatteryOptimizations(packageName)
+                        }.getOrNull(),
+                    )
+                }
+
+                "openBatterySettings" -> {
+                    val opened = runCatching {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+                            ),
+                        )
+                        true
+                    }.getOrElse {
+                        // Some OEM builds ship without that screen; the app's
+                        // own settings page always exists and gets there too.
+                        runCatching {
+                            startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", packageName, null),
+                                ),
+                            )
+                            true
+                        }.getOrDefault(false)
+                    }
+                    result.success(opened)
                 }
 
                 else -> result.notImplemented()

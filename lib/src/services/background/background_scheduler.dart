@@ -1,8 +1,12 @@
+import 'dart:ui' show DartPluginRegistrant;
+
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../../app/dependencies.dart';
+import '../../core/storage/local_store.dart';
 import '../../core/utils/logger.dart';
+import 'background_run_log.dart';
 import 'shop_sync_service.dart';
 
 /// Task identifiers. `uniqueName` deduplicates in WorkManager's queue;
@@ -25,7 +29,45 @@ abstract final class BackgroundTasks {
 @pragma('vm:entry-point')
 void backgroundCallbackDispatcher() {
   Workmanager().executeTask((String task, Map<String, dynamic>? inputData) async {
+    // Plugins whose implementation lives in Dart rather than in the Android
+    // engine register here. WorkManager builds a `FlutterEngine`, which brings
+    // up the Android-side registrant but not this one, and a plugin that is
+    // missing throws on first use — which in this isolate means the whole run
+    // dies before it can schedule anything.
+    DartPluginRegistrant.ensureInitialized();
+
     Log.d('Worker', 'Task fired: $task');
+
+    // Opened before the graph, and separately from it, so that a failure
+    // anywhere in `bootstrap` is still recorded. Everything below is written
+    // down: the run log is the only window into an isolate nobody can watch.
+    LocalStore? store;
+    int runs = 0;
+    try {
+      store = await LocalStore.init();
+      runs = BackgroundRunLog.nextRunCount(store);
+      await BackgroundRunLog.write(
+        store,
+        task: task,
+        outcome: BackgroundRunLog.started,
+        runs: runs,
+      );
+    } on Object catch (e, st) {
+      Log.e('Worker', 'Could not open storage', e, st);
+    }
+
+    Future<void> note(String outcome, String detail) async {
+      if (store != null) {
+        await BackgroundRunLog.write(
+          store,
+          task: task,
+          outcome: outcome,
+          runs: runs,
+          detail: detail,
+        );
+      }
+    }
+
     try {
       // A complete, independent object graph — see AppDependencies.
       final AppDependencies deps = await AppDependencies.bootstrap(
@@ -34,6 +76,7 @@ void backgroundCallbackDispatcher() {
 
       if (!deps.canFetchShop) {
         Log.d('Worker', 'Nothing to sync (signed out)');
+        await note(BackgroundRunLog.ok, 'Signed out — nothing to check');
         return true;
       }
 
@@ -48,14 +91,33 @@ void backgroundCallbackDispatcher() {
       final DateTime? next = outcome.nextResetAt;
       if (next != null) await BackgroundScheduler.scheduleResetCheck(next);
 
+      await note(BackgroundRunLog.ok, _describe(outcome));
       return true;
     } on Object catch (e, st) {
       Log.e('Worker', 'Background sync failed', e, st);
+      await note(BackgroundRunLog.failed, e.toString());
       // Returning false asks WorkManager to retry with backoff. A transient
       // network blip is exactly the case that deserves one.
       return false;
     }
   });
+}
+
+/// A sentence about a sync, for the diagnostics screen.
+String _describe(ShopSyncOutcome outcome) {
+  final String? skipped = outcome.skipped;
+  if (skipped != null) return 'Skipped — $skipped';
+  if (!outcome.shopChanged) return 'Shop unchanged';
+
+  final DateTime? deferred = outcome.notificationsDeferredUntil;
+  final String hits = outcome.wishlistMatches.isEmpty
+      ? ''
+      : ', ${outcome.wishlistMatches.length} wishlist hit(s)';
+  return deferred == null
+      ? 'Rotation found, notified straight away$hits'
+      : 'Rotation found, queued for '
+            '${deferred.hour.toString().padLeft(2, '0')}:'
+            '${deferred.minute.toString().padLeft(2, '0')}$hits';
 }
 
 /// Registers and re-arms the background work.

@@ -4,6 +4,33 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.1.1
+
+**Making the overnight check visible.** The one-minute test arrives, and the
+real thing still does not. The difference between them is where the work
+happens: the test is scheduled by the app while you are looking at it, while the
+real notification depends on a background check Android starts on its own
+schedule, in a process nobody can see, hours before you wake up. Nothing about
+that run has ever been observable — and "the check never ran", "it ran and could
+not sign in", "it ran and found nothing new" and "it ran and the alarm was
+dropped" all present as the same silence.
+
+The check now writes down what it did — when it ran, how many times it has ever
+run, and what it found or what it threw — and *Diagnostics* reads it back. The
+run count matters as much as the outcome: zero after a night means Android is
+not starting the task at all, which is a battery setting rather than anything in
+the app.
+
+So *Diagnostics* also reports whether battery optimisation is restricting the
+app, and a new settings row opens the system screen that lifts it. That setting
+can stop the nightly check outright while everything inside the app looks
+perfectly healthy.
+
+One likely cause fixed along the way: the background isolate never registered
+Dart-side plugin implementations. Android's own registrant covers the rest, but
+a plugin missing here throws the first time it is used — which in that isolate
+means the run dies before it can schedule anything, silently.
+
 ## v3.1.0
 
 **The shop notification has a sound and a banner now.** It was deliberately

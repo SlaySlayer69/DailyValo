@@ -50,6 +50,13 @@ abstract final class CacheKeys {
   /// Locally cached owned-skin UUIDs so the Collection tab renders offline.
   static const String ownedSkinLevels = 'collection.ownedSkinLevels';
 
+  /// What the background worker last did, and how many times it has run.
+  ///
+  /// Survives a sign-out on purpose — it is about Android's willingness to
+  /// start the task, not about the account, and wiping it would destroy the
+  /// evidence exactly when someone is debugging.
+  static const String lastBackgroundRun = 'background.lastRun';
+
   /// Cached player profile (Riot ID / rank / wallet) for the header.
   static const String playerProfile = 'player.profile';
 }
