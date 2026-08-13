@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../../core/constants/riot_constants.dart';
 import '../../../../core/errors/app_exception.dart';
@@ -130,29 +131,26 @@ class RiotAuthApi {
     }
 
     final Dio dio = DioFactory.createAuthClient();
-    final Uri authorize = Uri.parse(RiotConstants.authorizeUrl).replace(
-      queryParameters: <String, String>{
-        'redirect_uri': RiotConstants.redirectUri,
-        'client_id': RiotConstants.clientId,
-        'response_type': RiotConstants.responseType,
-        'nonce': RiotConstants.nonce,
-        'scope': RiotConstants.scope,
-      },
-    );
 
     final Response<dynamic> response = await dio.getUri<dynamic>(
-      authorize,
-      options: Options(
-        followRedirects: false,
-        headers: <String, String>{
-          'Cookie': '${RiotConstants.sessionCookieName}=$ssid',
-        },
-        validateStatus: (int? status) => status != null && status < 500,
-      ),
+      authorizeUri(),
+      options: authorizeOptions(ssid),
     );
 
+    final int status = response.statusCode ?? 0;
     final String location = response.headers.value('location') ?? '';
-    if (!location.contains('access_token=')) {
+
+    if (location.contains('access_token=')) {
+      // Riot rotates the cookie on every re-auth; keep the newest one.
+      final String? rotated = _ssidFromSetCookie(response.headers);
+      if (rotated != null) await _secureStore.writeSessionCookie(rotated);
+      return _parseRedirect(location);
+    }
+
+    // A redirect that lands anywhere else — the login page, in practice — is
+    // Riot saying the cookie is spent. That is the only answer worth signing
+    // the user out over.
+    if (status == 302 || status == 303) {
       Log.d('Auth', 'Re-auth rejected; redirect went to ${_origin(location)}');
       throw const AuthException(
         'Your Riot session expired. Please sign in again.',
@@ -160,12 +158,56 @@ class RiotAuthApi {
       );
     }
 
-    // Riot rotates the cookie on every re-auth; keep the newest one.
-    final String? rotated = _ssidFromSetCookie(response.headers);
-    if (rotated != null) await _secureStore.writeSessionCookie(rotated);
-
-    return _parseRedirect(location);
+    // Anything else is Riot being unhappy with the *request*, not with the
+    // cookie. Treating those as an expired session is how a single bad
+    // response permanently signed someone out: the sign-out clears the cookie,
+    // so the next attempt cannot even be made, and the background worker then
+    // skips every run forever. Fail transiently instead and let it retry.
+    Log.w('Auth', 'Re-auth got an unexpected HTTP $status; keeping the session');
+    throw const NetworkException(
+      'Riot could not renew the session just now.',
+    );
   }
+
+  /// The `/authorize` URL used for a cookie-only re-auth.
+  ///
+  /// Exposed for tests: this exchange cannot be exercised without Riot, and it
+  /// is the single point every session renewal in the app goes through.
+  @visibleForTesting
+  static Uri authorizeUri() =>
+      Uri.parse(RiotConstants.authorizeUrl).replace(
+        queryParameters: <String, String>{
+          'redirect_uri': RiotConstants.redirectUri,
+          'client_id': RiotConstants.clientId,
+          'response_type': RiotConstants.responseType,
+          'nonce': RiotConstants.nonce,
+          'scope': RiotConstants.scope,
+        },
+      );
+
+  /// The request options for that call.
+  ///
+  /// **`Accept: */*` is load-bearing.** The auth client sets
+  /// `Accept: application/json` on every request, which is right for the JSON
+  /// endpoints it was built for — and `/authorize` is not one of them. It is a
+  /// browser endpoint that answers with a 303 and a `Location`, and asking it
+  /// for JSON gets an HTTP 406 with an empty error description.
+  ///
+  /// That 406 was, in the end, the whole reason no notification ever arrived.
+  /// Every silent renewal failed, the failure was read as "the cookie is
+  /// dead", the app signed itself out about an hour after each sign-in, and a
+  /// signed-out background worker skips every run. What that looked like from
+  /// outside was a login button that signed you straight back in without
+  /// asking for anything, and a notification that never came.
+  @visibleForTesting
+  static Options authorizeOptions(String ssid) => Options(
+    followRedirects: false,
+    headers: <String, String>{
+      'Cookie': '${RiotConstants.sessionCookieName}=$ssid',
+      'Accept': '*/*',
+    },
+    validateStatus: (int? status) => status != null && status < 500,
+  );
 
   /// Copies the `ssid` cookie out of the WebView jar into secure storage.
   ///

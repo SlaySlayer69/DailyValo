@@ -216,7 +216,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 231 unit tests, no device needed
+flutter test                # 238 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -404,6 +404,22 @@ keeps the last segment — silently truncating an opaque token that contains one
 A truncated `ssid` would sign you in once and then quietly break every refresh
 afterwards.
 
+**`Accept: */*` on that call is load-bearing.** The auth client sets
+`Accept: application/json` on every request, which is right for the JSON
+endpoints it was built for and wrong for `/authorize` — a browser endpoint that
+answers with a 303 and a `Location`, and that returns **HTTP 406** when asked
+for JSON. Every silent renewal in the app's life failed on that, the failure
+read as "the cookie is dead", the app signed itself out about an hour after each
+sign-in, and a signed-out background worker skips every run. The visible
+symptoms were a login button that signed you straight back in without asking for
+anything, and a shop notification that never arrived. `test/reauth_request_test.dart`
+pins the header, along with `followRedirects: false` and the parameter set.
+
+Only a 302/303 that lands somewhere other than the redirect URI counts as an
+expired cookie. Any other status is treated as transient and retried: signing
+out clears the cookie a renewal needs, so reading one odd response as "expired"
+made the state unrecoverable rather than temporary.
+
 The cookie is re-read on **every app resume**, not just at sign-in, and a stored
 one is enough to rebuild a whole session on its own — `signInWithStoredCookie`
 needs nothing from a previous session, because a session is exactly what a token
@@ -437,7 +453,7 @@ nothing arrived.
 
 ## Testing
 
-231 unit tests, no device or network required:
+238 unit tests, no device or network required:
 
 ```
 test/
@@ -454,6 +470,7 @@ test/
 ├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
 ├── background_run_log_test.dart    The worker's own record of what it did
 ├── log_redaction_test.dart         Credentials never reach the exportable log
+├── reauth_request_test.dart        The one call every session renewal goes through
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
 ├── web_login_test.dart             Cookie-header parsing, redirect detection

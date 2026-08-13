@@ -4,6 +4,34 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.2.1
+
+**Staying signed in.** DailyValo has never once managed to renew a session
+without you. Every silent renewal asked Riot for its answer as JSON, and that
+one request is a browser endpoint that replies with a redirect — asked for JSON,
+it refuses outright. The refusal came back looking exactly like "your session
+has expired", so the app signed itself out about an hour after every sign-in.
+
+That is the whole story behind the notification that never arrived. A signed-out
+app has nothing to check the shop with, so the overnight check gave up before it
+started, no rotation was ever noticed, and no notification was ever scheduled.
+It is also why opening the app always wanted *Login with Riot*, and why pressing
+it signed you straight in without a password: Riot's own session was fine the
+entire time. Only the way DailyValo asked about it was wrong.
+
+Found by reading the log this version's predecessor started keeping, and
+confirmed against the live endpoint before changing anything.
+
+**A rejection now has to be a rejection.** Only an actual "this session is
+finished" from Riot signs you out. Anything else — a bad request, a hiccup at
+their end — is treated as temporary and retried, instead of throwing the session
+away permanently. Signing out deletes the very cookie a renewal needs, so one
+odd response used to be unrecoverable.
+
+**The home screen widget updates again.** It was being asked for by a name that
+did not exist, so every refresh failed and the launcher kept showing whatever it
+had drawn last — a day-old shop looks exactly like a current one.
+
 ## v3.2.0
 
 **Developer mode.** Diagnostics and the notification test now live behind a
