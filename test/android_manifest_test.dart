@@ -72,6 +72,31 @@ void main() {
       }
     });
 
+    test('the widget is addressed by the package it is actually in', () {
+      // `home_widget` resolves a bare class name against the applicationId,
+      // which is not the Kotlin namespace here. Every update died with
+      // ClassNotFoundException and nothing surfaced it — the launcher just kept
+      // showing yesterday's tiles, which looks identical to today's.
+      final String gradle = File('android/app/build.gradle.kts')
+          .readAsStringSync();
+      expect(gradle, contains('namespace = "com.dailyvalo.dailyvalo"'));
+      expect(gradle, contains('applicationId = "com.dailyvalo.app"'));
+
+      final String service = File(
+        'lib/src/services/widgets/home_widget_service.dart',
+      ).readAsStringSync();
+      expect(
+        service,
+        contains("'com.dailyvalo.dailyvalo.DailyShopWidget'"),
+        reason: 'the widget must be named by its real package',
+      );
+      expect(
+        service,
+        contains('qualifiedAndroidName:'),
+        reason: 'androidName would resolve against the applicationId again',
+      );
+    });
+
     test('keeps the plugin classes from being stripped in release', () {
       // R8 cannot see the reflective and Gson-driven uses inside the plugin,
       // and a release build is the only place this would ever show up.

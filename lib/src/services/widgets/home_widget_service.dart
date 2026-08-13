@@ -21,7 +21,17 @@ import '../../features/store/data/models/shop.dart';
 /// preferences `home_widget` manages, so the widget keeps rendering when the
 /// app is not running.
 abstract final class HomeWidgetService {
-  static const String androidWidgetName = 'DailyShopWidget';
+  /// Fully qualified, and it has to be.
+  ///
+  /// `home_widget`'s `androidName` resolves the class against the
+  /// **applicationId** — `com.dailyvalo.app` — while the Kotlin sources live in
+  /// the namespace `com.dailyvalo.dailyvalo`. The two differ, so every update
+  /// died with `ClassNotFoundException: com.dailyvalo.app.DailyShopWidget` and
+  /// the widget silently never refreshed. Nothing surfaced it: the failure is
+  /// caught, the launcher keeps showing whatever it last drew, and a home
+  /// screen tile that is a day stale looks exactly like one that is current.
+  static const String androidWidgetName =
+      'com.dailyvalo.dailyvalo.DailyShopWidget';
   static const String appGroupId = 'com.dailyvalo.app.widget';
 
   /// Four, matching the shop. More would be unreadable at widget size.
@@ -93,7 +103,7 @@ abstract final class HomeWidgetService {
       }
 
       await HomeWidget.saveWidgetData<String>(keyState, stateReady);
-      await HomeWidget.updateWidget(androidName: androidWidgetName);
+      await HomeWidget.updateWidget(qualifiedAndroidName: androidWidgetName);
       Log.d('Widget', 'Home widget updated with ${offers.length} tiles');
     } on Object catch (e) {
       Log.e('Widget', 'Could not update the home widget', e);
@@ -108,7 +118,7 @@ abstract final class HomeWidgetService {
         await HomeWidget.saveWidgetData<String>(imageKey(i), '');
       }
       await HomeWidget.saveWidgetData<String>(keyState, stateEmpty);
-      await HomeWidget.updateWidget(androidName: androidWidgetName);
+      await HomeWidget.updateWidget(qualifiedAndroidName: androidWidgetName);
     } on Object catch (e) {
       Log.e('Widget', 'Could not clear the home widget', e);
     }
