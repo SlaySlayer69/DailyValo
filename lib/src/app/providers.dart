@@ -6,7 +6,11 @@ import '../core/constants/storage_keys.dart';
 import '../core/network/riot_session_manager.dart';
 import '../core/network/webview_cookie_reader.dart';
 import '../core/storage/local_store.dart';
+import '../core/storage/secure_token_store.dart';
+import '../features/auth/data/account_registry.dart';
 import '../features/auth/data/datasources/riot_auth_api.dart';
+import '../features/auth/data/models/account.dart';
+import '../features/auth/data/models/riot_session.dart';
 import '../features/content/data/models/content_catalog.dart';
 import '../features/content/data/models/weapon_skin.dart';
 import '../features/content/data/repositories/content_repository.dart';
@@ -26,17 +30,64 @@ import 'dependencies.dart';
 // Object graph
 // -----------------------------------------------------------------------------
 
-/// Overridden in `main()` with the bootstrapped graph.
+/// The graph the UI is currently driven by, and the ability to swap it.
 ///
 /// Riverpod is used as a *view* over [AppDependencies], not as the container
 /// itself — see the note on that class for why the graph has to exist outside
 /// the widget tree.
-final Provider<AppDependencies> appDependenciesProvider =
-    Provider<AppDependencies>(
-      (Ref ref) => throw UnimplementedError(
+///
+/// It is a notifier rather than a constant because the graph is scoped to one
+/// account. Switching accounts does not mutate it; it builds a second one and
+/// puts that in its place, and every provider below rebuilds off the new
+/// stores. Repositories therefore never need to know that accounts can change.
+class AppGraph extends Notifier<AppDependencies> {
+  AppGraph(this._initial);
+
+  final AppDependencies _initial;
+
+  @override
+  AppDependencies build() => _initial;
+
+  /// Points the app at another signed-in account.
+  Future<void> switchTo(Account account) async {
+    await state.accounts.setActive(account.puuid);
+    await _rebuild(account);
+  }
+
+  /// Rebuilds against whichever account the registry now considers active —
+  /// after a sign-in, or after one account has been signed out.
+  Future<void> reload() => _rebuild(state.accounts.active);
+
+  Future<void> _rebuild(Account? account) async {
+    final AppDependencies next = await AppDependencies.bootstrap(
+      forAccount: account,
+    );
+    // A fresh graph means fresh stores; the widget tree must not keep showing
+    // the previous account's shop, header or collection while they load.
+    state = next;
+    ref.invalidate(shopControllerProvider);
+    ref.invalidate(playerControllerProvider);
+    ref.invalidate(ownedSkinsProvider);
+    ref.invalidate(wishlistControllerProvider);
+  }
+}
+
+final NotifierProvider<AppGraph, AppDependencies> appDependenciesProvider =
+    NotifierProvider<AppGraph, AppDependencies>(
+      () => throw UnimplementedError(
         'appDependenciesProvider must be overridden in main().',
       ),
     );
+
+/// The accounts signed in on this device, and which one is showing.
+final Provider<AccountRegistry> accountRegistryProvider =
+    Provider<AccountRegistry>(
+      (Ref ref) => ref.watch(appDependenciesProvider).accounts,
+    );
+
+final Provider<Account> activeAccountProvider = Provider<Account>(
+  (Ref ref) => ref.watch(appDependenciesProvider).account,
+);
 
 final Provider<LocalStore> localStoreProvider = Provider<LocalStore>(
   (Ref ref) => ref.watch(appDependenciesProvider).localStore,
@@ -114,33 +165,79 @@ class AppModeController extends Notifier<AppMode> {
     await _onEnteredApp();
   }
 
-  /// Called after a successful sign-in. The session manager has already
-  /// adopted the session at this point.
-  Future<void> onSignedIn() async {
+  /// Called after a successful sign-in, with the session that produced it.
+  ///
+  /// Registers the account and rebuilds the graph around it, so this is both
+  /// "signed in" and "added another account" — from here they are the same
+  /// operation, which is why adding one needs no separate path.
+  Future<void> onSignedIn(RiotSession session) async {
     await ref.read(localStoreProvider).putSetting(SettingKeys.demoMode, false);
+    await ref.read(accountRegistryProvider).upsert(session);
+    await ref.read(appDependenciesProvider.notifier).reload();
+
+    // Riot's own jar still holds the session that was just used. Left there,
+    // "Add account" would sail past the login page and add the same account
+    // again; our copy of the cookie is already in the keystore, so dropping it
+    // costs nothing.
+    await const WebViewCookieReader().clear();
+
     ref.invalidateSelf();
     await _onEnteredApp();
   }
 
+  /// Signs out the account on screen, and moves to another if there is one.
   Future<void> signOut() async {
-    await BackgroundScheduler.cancelAll();
-    await ref.read(notificationServiceProvider).cancelAll();
-    // Someone else's shop must not stay on the home screen of a signed-out
-    // phone.
-    await HomeWidgetService.clear();
+    final AppDependencies deps = ref.read(appDependenciesProvider);
+    final Account leaving = deps.account;
 
-    // Riot's login lives in a WebView with its own cookie jar. Clearing our
-    // keystore alone would leave that jar intact, and the next sign-in would
-    // sail straight past the login page back into the same account.
+    // This account's notifications, not everyone's — the ids are per account
+    // exactly so one sign-out cannot silence the rest.
+    await deps.notifications.cancelForThisAccount();
     await const WebViewCookieReader().clear();
     await ref.read(localStoreProvider).putSetting(SettingKeys.demoMode, false);
     await ref.read(sessionManagerProvider).signOut();
 
-    // Everything user-scoped is now wrong; drop it rather than showing the
-    // previous account's shop behind a login screen.
-    ref.invalidate(shopControllerProvider);
-    ref.invalidate(playerControllerProvider);
-    ref.invalidate(ownedSkinsProvider);
+    if (leaving.puuid.isNotEmpty) {
+      await deps.accounts.remove(leaving.puuid, deps.secureStore);
+    }
+
+    final bool anyLeft = !deps.accounts.isEmpty;
+    if (!anyLeft) {
+      await BackgroundScheduler.cancelAll();
+      // Someone else's shop must not stay on the home screen of a signed-out
+      // phone.
+      await HomeWidgetService.clear();
+    }
+
+    await ref.read(appDependenciesProvider.notifier).reload();
+    ref.invalidateSelf();
+  }
+
+  /// Signs every account out and returns the device to the login screen.
+  Future<void> signOutAll() async {
+    final AppDependencies deps = ref.read(appDependenciesProvider);
+
+    await BackgroundScheduler.cancelAll();
+    await deps.notifications.cancelEverything();
+    await HomeWidgetService.clear();
+    await const WebViewCookieReader().clear();
+    await ref.read(localStoreProvider).putSetting(SettingKeys.demoMode, false);
+    await ref.read(sessionManagerProvider).signOut();
+
+    for (final Account account in deps.accounts.all()) {
+      await deps.accounts.remove(
+        account.puuid,
+        SecureTokenStore(accountId: account.puuid),
+      );
+    }
+
+    await ref.read(appDependenciesProvider.notifier).reload();
+    ref.invalidateSelf();
+  }
+
+  /// Points the app at another signed-in account.
+  Future<void> switchTo(Account account) async {
+    await ref.read(appDependenciesProvider.notifier).switchTo(account);
     ref.invalidateSelf();
   }
 

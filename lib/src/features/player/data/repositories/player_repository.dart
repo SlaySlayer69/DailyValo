@@ -17,6 +17,7 @@ class PlayerRepository {
     required RiotSessionManager sessions,
     required LocalStore store,
     required ContentRepository content,
+    required this.accountId,
     DemoStoreSource demo = const DemoStoreSource(),
   }) : _api = api,
        _sessions = sessions,
@@ -30,13 +31,16 @@ class PlayerRepository {
   final ContentRepository _content;
   final DemoStoreSource _demo;
 
+  /// Whose profile this reads and caches.
+  final String accountId;
+
   bool get _isDemoMode => _store.setting<bool>(SettingKeys.demoMode, false);
 
   /// Last known profile, available synchronously so the header never flashes
   /// empty while the network call is in flight.
   PlayerProfile? get cached {
     final Map<String, dynamic>? json = _store.readCachedMap(
-      CacheKeys.playerProfile,
+      CacheKeys.playerProfile(accountId),
     );
     if (json == null) return null;
     try {
@@ -52,7 +56,7 @@ class PlayerRepository {
         ? _buildDemoProfile()
         : await _fetchLiveProfile();
 
-    await _store.writeCached(CacheKeys.playerProfile, profile.toJson());
+    await _store.writeCached(CacheKeys.playerProfile(accountId), profile.toJson());
     return profile;
   }
 

@@ -4,12 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../../../../core/constants/riot_constants.dart';
-import '../../../../core/errors/app_exception.dart';
-import '../../../../core/network/webview_cookie_reader.dart';
-import '../../data/datasources/riot_auth_api.dart';
-import '../../data/models/riot_session.dart';
-import 'riot_login_webview_page.dart';
+import '../riot_sign_in.dart';
 
 /// Sign-in entry point.
 ///
@@ -97,40 +92,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _signIn() async {
-    setState(() => _error = null);
-
-    final WebLoginTokens? tokens = await RiotLoginWebViewPage.show(context);
-    // Null means the user closed the WebView; that is not an error.
-    if (tokens == null || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      // The durable half of the session. Read *before* anything else touches
-      // the jar, and flushed so a process death right now does not lose it.
-      const WebViewCookieReader cookies = WebViewCookieReader();
-      await cookies.flush();
-      final Map<String, String> jar = await cookies.cookiesFor(
-        RiotConstants.authBase,
-      );
-
-      final RiotAuthApi api = ref.read(authApiProvider);
-      final RiotSession session = await api.completeWebLogin(
-        accessToken: tokens.accessToken,
-        idToken: tokens.idToken,
-        expiresInSeconds: tokens.expiresIn,
-        ssidCookie: jar[RiotConstants.sessionCookieName],
-      );
-
-      await ref.read(sessionManagerProvider).adopt(session);
-      await ref.read(appModeProvider.notifier).onSignedIn();
-      // The mode change swaps the root widget out; nothing left to do.
-    } on AppException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Sign-in failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    setState(() {
+      _error = null;
+      _busy = true;
+    });
+    final String? error = await RiotSignIn.run(context, ref);
+    if (!mounted) return;
+    setState(() {
+      _error = error;
+      _busy = false;
+    });
   }
 
   Future<void> _enterDemoMode() async {

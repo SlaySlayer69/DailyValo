@@ -7,6 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fixtures.dart';
 
+/// A stand-in puuid — every wishlist belongs to one account.
+const String kAccount = 'puuid-abc';
+
 void main() {
   late Directory tempDir;
   late LocalStore store;
@@ -15,7 +18,7 @@ void main() {
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('dailyvalo_test');
     store = await LocalStore.initAt(tempDir.path);
-    wishlist = WishlistRepository(store: store);
+    wishlist = WishlistRepository(store: store, accountId: kAccount);
   });
 
   tearDown(() async {
@@ -124,6 +127,7 @@ void main() {
       final LocalStore reopened = await LocalStore.initAt(tempDir.path);
       final WishlistRepository restored = WishlistRepository(
         store: reopened,
+        accountId: kAccount,
       );
 
       expect(restored.getAll().single.skinName, 'Reaver Sheriff');

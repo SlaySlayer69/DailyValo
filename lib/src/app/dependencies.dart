@@ -8,7 +8,9 @@ import '../core/network/riot_session_manager.dart';
 import '../core/storage/local_store.dart';
 import '../core/storage/secure_token_store.dart';
 import '../core/utils/logger.dart';
+import '../features/auth/data/account_registry.dart';
 import '../features/auth/data/datasources/riot_auth_api.dart';
+import '../features/auth/data/models/account.dart';
 import '../features/auth/data/models/riot_session.dart';
 import '../features/content/data/datasources/valorant_api_client.dart';
 import '../features/content/data/repositories/content_repository.dart';
@@ -29,6 +31,8 @@ import '../services/notifications/notification_service.dart';
 /// over this.
 class AppDependencies {
   AppDependencies._({
+    required this.account,
+    required this.accounts,
     required this.localStore,
     required this.secureStore,
     required this.clientVersion,
@@ -43,6 +47,14 @@ class AppDependencies {
     required this.player,
     required this.notifications,
   });
+
+  /// Whose app this graph is. Every per-account store below is scoped to it.
+  final Account account;
+
+  /// Device-wide: which accounts exist, and which one the UI shows.
+  final AccountRegistry accounts;
+
+  String get accountId => account.puuid;
 
   final LocalStore localStore;
   final SecureTokenStore secureStore;
@@ -73,10 +85,28 @@ class AppDependencies {
   /// notification tap handler, mainly — and keeps the worker's cold start
   /// short, since WorkManager gives it about ten minutes and Android will kill
   /// it well before that if it misbehaves.
-  static Future<AppDependencies> bootstrap({bool isBackground = false}) async {
+  static Future<AppDependencies> bootstrap({
+    bool isBackground = false,
+    Account? forAccount,
+  }) async {
     final LocalStore localStore = await LocalStore.init();
     await _startLogging(localStore, isBackground: isBackground);
-    final SecureTokenStore secureStore = SecureTokenStore();
+
+    // Before anything reads an account-scoped key. An upgrade that skipped this
+    // would look exactly like a fresh install — signed out, no wishlist — with
+    // all of it still on disk under names nothing looks at any more.
+    await AccountRegistry.migrateIfNeeded(
+      store: localStore,
+      secure: SecureTokenStore.unscoped(),
+    );
+
+    final AccountRegistry accounts = AccountRegistry(store: localStore);
+    final Account account =
+        forAccount ?? accounts.active ?? Account.signedOut;
+
+    final SecureTokenStore secureStore = SecureTokenStore(
+      accountId: account.puuid,
+    );
     final ClientVersionHolder clientVersion = ClientVersionHolder.fromCache();
 
     final RiotAuthApi authApi = RiotAuthApi(secureStore: secureStore);
@@ -87,8 +117,10 @@ class AppDependencies {
       secureStore: secureStore,
       refresher: authApi.reauthenticate,
     );
-    await sessions.restore();
-    await _recoverSessionFromCookie(sessions, authApi);
+    if (account.puuid.isNotEmpty) {
+      await sessions.restore();
+      await _recoverSessionFromCookie(sessions, authApi);
+    }
 
     final Dio gameDio = DioFactory.createGameClient(
       sessionManager: sessions,
@@ -110,31 +142,40 @@ class AppDependencies {
       clientVersion: clientVersion,
     );
 
-    final WishlistRepository wishlist = WishlistRepository(store: localStore);
+    final WishlistRepository wishlist = WishlistRepository(
+      store: localStore,
+      accountId: account.puuid,
+    );
     final StoreRepository store = StoreRepository(
       api: storeApi,
       content: content,
       wishlist: wishlist,
       sessions: sessions,
       store: localStore,
+      accountId: account.puuid,
     );
     final PlayerRepository player = PlayerRepository(
       api: storeApi,
       sessions: sessions,
       store: localStore,
       content: content,
+      accountId: account.puuid,
     );
 
-    final NotificationService notifications = NotificationService();
+    final NotificationService notifications = NotificationService(
+      account: account,
+    );
     await notifications.init();
 
     Log.d(
       'Bootstrap',
-      'Graph ready (${isBackground ? 'background' : 'ui'}), '
-          'signedIn=${sessions.isAuthenticated}',
+      'Graph ready (${isBackground ? 'background' : 'ui'}) for '
+          '${account.riotId}, signedIn=${sessions.isAuthenticated}',
     );
 
     return AppDependencies._(
+      account: account,
+      accounts: accounts,
       localStore: localStore,
       secureStore: secureStore,
       clientVersion: clientVersion,

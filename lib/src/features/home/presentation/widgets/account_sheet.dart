@@ -13,6 +13,8 @@ import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/platform/battery_optimisation.dart';
 import '../../../../core/storage/local_store.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../../features/auth/data/models/account.dart';
+import '../../../../features/auth/presentation/riot_sign_in.dart';
 import '../../../../features/store/data/models/shop.dart';
 import '../../../../services/background/shop_sync_service.dart';
 import '../../../../services/diagnostics/connection_diagnostics.dart';
@@ -84,6 +86,8 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       SettingKeys.verboseLogging,
       false,
     );
+    final List<Account> accounts = ref.watch(accountRegistryProvider).all();
+    final Account active = ref.watch(activeAccountProvider);
 
     return SafeArea(
       // The sheet sizes itself to the content, but a small screen or a large
@@ -255,6 +259,31 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
 
             const Divider(height: AppSpacing.xl),
 
+            if (mode == AppMode.live) ...<Widget>[
+              ListTile(
+                onTap: _busy ? null : _addAccount,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_add_alt_1_outlined),
+                title: const Text('Add account'),
+                subtitle: const Text(
+                  'Sign in to another Riot account and keep this one',
+                ),
+              ),
+              // Only with somewhere to switch to. A picker holding one entry
+              // is a dead end that still has to be tapped through.
+              if (accounts.length > 1)
+                ListTile(
+                  onTap: _busy ? null : _switchAccount,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.swap_horiz_rounded),
+                  title: const Text('Switch account'),
+                  subtitle: Text(
+                    'Showing ${active.riotId} · '
+                    '${accounts.length} accounts signed in',
+                  ),
+                ),
+            ],
+
             ListTile(
               onTap: _busy ? null : _signOut,
               contentPadding: EdgeInsets.zero,
@@ -263,15 +292,37 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
                 color: AppColors.danger,
               ),
               title: Text(
-                mode == AppMode.demo ? 'Leave demo mode' : 'Sign out',
+                mode == AppMode.demo
+                    ? 'Leave demo mode'
+                    : accounts.length > 1
+                    ? 'Sign out of ${active.gameName}'
+                    : 'Sign out',
                 style: const TextStyle(color: AppColors.danger),
               ),
               subtitle: Text(
                 mode == AppMode.demo
                     ? 'Return to the sign-in screen'
+                    : accounts.length > 1
+                    ? 'Keeps your other accounts signed in'
                     : 'Clears your saved Riot session from this device',
               ),
             ),
+            if (accounts.length > 1)
+              ListTile(
+                onTap: _busy ? null : _signOutAll,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.logout_rounded,
+                  color: AppColors.danger,
+                ),
+                title: const Text(
+                  'Sign out of all accounts',
+                  style: TextStyle(color: AppColors.danger),
+                ),
+                subtitle: Text(
+                  'Removes all ${accounts.length} from this device',
+                ),
+              ),
           ],
         ),
       ),
@@ -485,6 +536,107 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       'Queued for ${TimeOfDay.fromDateTime(at).format(context)}. '
       'Close the app to see it arrive the way it will in the morning.',
     );
+  }
+
+  /// Signs in to another account and leaves this one signed in.
+  Future<void> _addAccount() async {
+    setState(() => _busy = true);
+    final String? error = await RiotSignIn.run(context, ref);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (error != null) {
+      _toast(error);
+    } else {
+      // The sheet is showing the previous account's name in three places; it
+      // has to close for the header and tabs to catch up anyway.
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _switchAccount() async {
+    final List<Account> accounts = ref.read(accountRegistryProvider).all();
+    final Account current = ref.read(activeAccountProvider);
+
+    final Account? picked = await showDialog<Account>(
+      context: context,
+      builder: (BuildContext dialogContext) => SimpleDialog(
+        backgroundColor: AppColors.backgroundElevated,
+        title: const Text('Switch account'),
+        children: <Widget>[
+          for (final Account account in accounts)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(account),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  account.puuid == current.puuid
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                  color: account.puuid == current.puuid
+                      ? AppColors.accent
+                      : null,
+                ),
+                title: Text(account.gameName),
+                subtitle: Text('#${account.tagLine}'),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (picked == null || picked.puuid == current.puuid || !mounted) return;
+
+    setState(() => _busy = true);
+    await ref.read(appModeProvider.notifier).switchTo(picked);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _signOutAll() async {
+    final int count = ref.read(accountRegistryProvider).all().length;
+    final bool confirmed = await _confirm(
+      title: 'Sign out of all accounts?',
+      message:
+          'All $count accounts are removed from this device, along with their '
+          'wishlists and cached collections. Riot itself is unaffected.',
+      action: 'Sign out of all',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _busy = true);
+    await ref.read(appModeProvider.notifier).signOutAll();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// A yes/no dialog for the things that throw data away.
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String action,
+  }) async {
+    final bool? answer = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        backgroundColor: AppColors.backgroundElevated,
+        title: Text(title),
+        content: Text(message),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              action,
+              style: const TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    return answer ?? false;
   }
 
   Future<void> _signOut() async {

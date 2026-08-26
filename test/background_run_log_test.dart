@@ -98,7 +98,7 @@ void main() {
         runs: 5,
       );
 
-      await store.clearUserData();
+      await store.clearUserData('puuid-abc');
 
       // It is evidence about Android's scheduling, not about the account, and
       // it is needed most while someone is debugging a sign-in problem.

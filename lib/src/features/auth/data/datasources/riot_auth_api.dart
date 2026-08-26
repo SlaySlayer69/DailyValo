@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
@@ -53,8 +55,28 @@ class RiotAuthApi {
     required int expiresInSeconds,
     String? ssidCookie,
   }) async {
+    // The session is built *first*, because until Riot answers `/userinfo`
+    // there is no puuid — and without a puuid there is no way to say which
+    // account this cookie and this session belong to. Writing them before that
+    // filed a newly added account's credentials under whichever account
+    // happened to be open, which is the one mistake in this flow that cannot be
+    // noticed from the outside: both accounts look signed in, and one of them
+    // silently renews as the other.
+    final RiotSession session = await _buildSession(
+      _TokenPair(
+        accessToken: accessToken,
+        idToken: idToken,
+        expiresIn: expiresInSeconds,
+      ),
+    );
+
+    await _secureStore.writeSessionFor(
+      session.puuid,
+      jsonEncode(session.toJson()),
+    );
+
     if (ssidCookie != null && ssidCookie.isNotEmpty) {
-      await _secureStore.writeSessionCookie(ssidCookie);
+      await _secureStore.writeSessionCookieFor(session.puuid, ssidCookie);
     } else {
       Log.e(
         'Auth',
@@ -63,13 +85,7 @@ class RiotAuthApi {
       );
     }
 
-    return _buildSession(
-      _TokenPair(
-        accessToken: accessToken,
-        idToken: idToken,
-        expiresIn: expiresInSeconds,
-      ),
-    );
+    return session;
   }
 
   // ---------------------------------------------------------------------------

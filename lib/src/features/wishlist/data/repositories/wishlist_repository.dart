@@ -8,14 +8,19 @@ import '../wishlist_transfer.dart';
 /// Reads are synchronous — the box is already in memory — which keeps the
 /// "is this skin wishlisted?" check on the shop card free of a `FutureBuilder`.
 class WishlistRepository {
-  WishlistRepository({required LocalStore store}) : _store = store;
+  WishlistRepository({required LocalStore store, required this.accountId})
+    : _store = store;
 
   final LocalStore _store;
+
+  /// Whose wishlist this is. Each account keeps its own — the same skin can be
+  /// hunted on one and already owned on another.
+  final String accountId;
 
   /// Newest additions first.
   List<WishlistEntry> getAll() {
     final List<WishlistEntry> entries = _store
-        .readWishlist()
+        .readWishlist(accountId)
         .map(WishlistEntry.fromJson)
         .where((WishlistEntry e) => e.skinUuid.isNotEmpty)
         .toList();
@@ -25,27 +30,54 @@ class WishlistRepository {
     return entries;
   }
 
-  bool contains(String skinUuid) => _store.isWishlisted(skinUuid);
+  bool contains(String skinUuid) => _store.isWishlisted(accountId, skinUuid);
 
-  Set<String> get skinUuids => _store.wishlistedSkinUuids();
+  Set<String> get skinUuids => _store.wishlistedSkinUuids(accountId);
 
   /// The level-1 UUIDs, which is what a storefront offer id actually is.
   Set<String> get offerUuids =>
       getAll().map((WishlistEntry e) => e.offerUuid).toSet();
 
   Future<void> add(WeaponSkin skin) => _store.putWishlistEntry(
+    accountId,
     skin.uuid,
     WishlistEntry.fromSkin(skin).toJson(),
   );
 
-  Future<void> remove(String skinUuid) => _store.deleteWishlistEntry(skinUuid);
+  /// Copies this wishlist onto another account, **adding only**.
+  ///
+  /// A skin the target already wants is left exactly as it is, keeping its own
+  /// `addedAt` so the target's list does not reorder itself. Returns how many
+  /// were actually new, which is the only number worth reporting: "copied 40"
+  /// when 38 were already there reads as though something happened.
+  ///
+  /// Deliberately not a replace. Two accounts usually share most of a wishlist
+  /// and differ in a few skins one of them already owns; overwriting would
+  /// throw those differences away, and there would be nothing to undo it with.
+  Future<int> copyTo(String targetAccountId) async {
+    if (targetAccountId == accountId || targetAccountId.isEmpty) return 0;
+
+    int added = 0;
+    for (final WishlistEntry entry in getAll()) {
+      if (_store.isWishlisted(targetAccountId, entry.skinUuid)) continue;
+      await _store.putWishlistEntry(
+        targetAccountId,
+        entry.skinUuid,
+        entry.toJson(),
+      );
+      added++;
+    }
+    return added;
+  }
+
+  Future<void> remove(String skinUuid) => _store.deleteWishlistEntry(accountId, skinUuid);
 
   /// Puts a removed entry back exactly as it was, keeping its original
   /// `addedAt` so an undo restores its place in the list rather than jumping it
   /// to the top. Takes the entry rather than a skin because undo has to work
   /// when the catalogue is not loaded.
   Future<void> restore(WishlistEntry entry) =>
-      _store.putWishlistEntry(entry.skinUuid, entry.toJson());
+      _store.putWishlistEntry(accountId, entry.skinUuid, entry.toJson());
 
   /// Returns the entry's new state, so callers can drive a toggle without
   /// re-reading.
@@ -73,7 +105,7 @@ class WishlistRepository {
         present++;
         continue;
       }
-      await _store.putWishlistEntry(entry.skinUuid, entry.toJson());
+      await _store.putWishlistEntry(accountId, entry.skinUuid, entry.toJson());
       added++;
     }
 

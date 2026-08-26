@@ -6,6 +6,8 @@ import 'package:workmanager/workmanager.dart';
 import '../../app/dependencies.dart';
 import '../../core/storage/local_store.dart';
 import '../../core/utils/logger.dart';
+import '../../features/auth/data/account_registry.dart';
+import '../../features/auth/data/models/account.dart';
 import '../logging/log_file.dart';
 import 'background_run_log.dart';
 import 'shop_sync_service.dart';
@@ -70,35 +72,72 @@ void backgroundCallbackDispatcher() {
     }
 
     try {
-      // A complete, independent object graph — see AppDependencies.
-      final AppDependencies deps = await AppDependencies.bootstrap(
-        isBackground: true,
-      );
+      // Every signed-in account, each with its own graph. A shop notification
+      // that only ever covered whichever account happened to be on screen would
+      // be worse than none for the others: silence reads as "nothing new".
+      final List<Account> accounts = store == null
+          ? const <Account>[]
+          : AccountRegistry(store: store).all();
 
-      if (!deps.canFetchShop) {
-        Log.d('Worker', 'Nothing to sync (signed out)');
-        await note(BackgroundRunLog.ok, 'Signed out — nothing to check');
-        return true;
+      // The demo-mode and never-signed-in cases still have exactly one graph to
+      // build, and `canFetchShop` decides whether it does anything.
+      final List<Account?> targets = accounts.isEmpty
+          ? <Account?>[null]
+          : accounts;
+
+      final List<String> notes = <String>[];
+      DateTime? nextReset;
+      bool anyFailed = false;
+
+      for (final Account? account in targets) {
+        final String who = account?.gameName ?? 'this device';
+        try {
+          final AppDependencies deps = await AppDependencies.bootstrap(
+            isBackground: true,
+            forAccount: account,
+          );
+
+          if (!deps.canFetchShop) {
+            Log.d('Worker', '$who: nothing to sync (signed out)');
+            notes.add('$who: signed out');
+            continue;
+          }
+
+          final ShopSyncOutcome outcome = await ShopSyncService(deps).sync();
+          Log.d(
+            'Worker',
+            '$who: changed=${outcome.shopChanged}, '
+                'wishlistHits=${outcome.wishlistMatches.length}',
+          );
+          notes.add('$who: ${_describe(outcome)}');
+          nextReset ??= outcome.nextResetAt;
+        } on Object catch (e, st) {
+          // One account's expired cookie must not stop the others being
+          // checked — that is the difference between one person missing a
+          // digest and everybody missing one.
+          Log.e('Worker', '$who: sync failed', e, st);
+          notes.add('$who: failed — $e');
+          anyFailed = true;
+        }
       }
 
-      final ShopSyncOutcome outcome = await ShopSyncService(deps).sync();
-      Log.d(
-        'Worker',
-        'Sync done: changed=${outcome.shopChanged}, '
-            'wishlistHits=${outcome.wishlistMatches.length}',
+      // Re-arm the targeted check for the next reset we now know about. The
+      // reset is the same instant for every account, so the first answer will
+      // do.
+      if (nextReset != null) {
+        await BackgroundScheduler.scheduleResetCheck(nextReset);
+      }
+
+      await note(
+        anyFailed ? BackgroundRunLog.failed : BackgroundRunLog.ok,
+        notes.isEmpty ? 'Nothing to check' : notes.join(' · '),
       );
-
-      // Re-arm the targeted check for the next reset we now know about.
-      final DateTime? next = outcome.nextResetAt;
-      if (next != null) await BackgroundScheduler.scheduleResetCheck(next);
-
-      await note(BackgroundRunLog.ok, _describe(outcome));
-      return true;
+      // Only ask WorkManager to retry when something actually failed; a
+      // transient network blip is exactly the case that deserves one.
+      return !anyFailed;
     } on Object catch (e, st) {
-      Log.e('Worker', 'Background sync failed', e, st);
+      Log.e('Worker', 'Background run failed', e, st);
       await note(BackgroundRunLog.failed, e.toString());
-      // Returning false asks WorkManager to retry with backoff. A transient
-      // network blip is exactly the case that deserves one.
       return false;
     } finally {
       // This isolate is killed the instant the callback returns, taking any
