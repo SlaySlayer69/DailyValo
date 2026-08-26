@@ -10,7 +10,16 @@ name: Test build
 # from a phone, and `make_latest: false` keeps it out of the way of the real
 # releases.
 
+# Two ways in:
+#   * push a tag like `test-v3.3.0-1` — works from *any* branch, which is the
+#     point: `workflow_dispatch` only offers workflows that already exist on the
+#     default branch, so it cannot build a branch before that branch is merged.
+#   * Actions > Test build > Run workflow — available once this file is on the
+#     default branch.
 on:
+  push:
+    tags:
+      - 'test-v*'
   workflow_dispatch:
     inputs:
       ref:
@@ -31,14 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.ref_name }}
           fetch-depth: 0
 
       - name: Name this build
         id: name
         run: |
           version=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
-          echo "tag=v$version-test.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # A dispatch invents its own tag; a tag push already has one.
+          if [ -n "${{ inputs.ref }}" ]; then
+            echo "tag=test-v$version-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: subosito/flutter-action@v2
@@ -90,7 +104,7 @@ jobs:
       - name: Write the notes
         run: |
           {
-            echo "Test build of \`${{ inputs.ref }}\` at \
+            echo "Test build of \`${{ inputs.ref || github.ref_name }}\` at \
           \`${{ github.sha }}\`."
             echo
             if [ -n "${{ inputs.note }}" ]; then
@@ -107,7 +121,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.name.outputs.tag }}
-          target_commitish: ${{ inputs.ref }}
+          target_commitish: ${{ inputs.ref || github.sha }}
           name: Test build ${{ steps.name.outputs.tag }}
           body_path: /tmp/notes.md
           files: dist/*.apk
