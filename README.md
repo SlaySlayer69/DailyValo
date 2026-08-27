@@ -41,6 +41,36 @@ the three sections, so each section carries its own — and each refetches the
 storefront when it reaches zero, rather than displaying `00:00:00` over stale
 offers.
 
+### Accounts
+
+Several Riot accounts can be signed in at once. **Identity is the puuid**, never
+the Riot ID — a Riot ID can be changed, and two accounts can hold the same one at
+different times. Every stored value is keyed by it: session, cookie, wishlist,
+shop snapshot, notification baseline, collection, profile.
+
+Each account also carries a **slot**, a small stable number allocated on first
+sign-in, and notification ids are derived from it (`1000 + slot*10 + kind`). A
+position in the account list would not do: removing the first of three accounts
+shifts the others down, and the notification Android is already holding for one
+would suddenly belong to another — replacing it, or being cancelled by it.
+
+The background check walks every account in turn, each with its own graph, and
+one account's expired cookie does not stop the rest being checked. Notifications
+are titled with the account's game name rather than the app's, because four skin
+names say nothing until you know whose four they are.
+
+Switching accounts builds a second graph and puts it in place of the first
+rather than mutating anything, so repositories never learn that accounts can
+change. The upgrade from the single-account layout is tested harder than the
+feature itself: it moves session, cookie, wishlist and caches onto the account
+they belonged to, and a failure leaves its "done" flag unset so the next launch
+retries. Skipping it would have made an upgrade look like a fresh install, with
+everything still on disk under names nothing reads any more.
+
+Signing an account out keeps its wishlist, keyed by the same puuid. It is the
+one thing here the user assembled by hand and the one thing Riot cannot hand
+back; adding the account again picks it up.
+
 ### Notifications
 
 Two notifications, two Android channels, deliberately different:
@@ -216,7 +246,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 238 unit tests, no device needed
+flutter test                # 268 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -453,7 +483,7 @@ nothing arrived.
 
 ## Testing
 
-238 unit tests, no device or network required:
+268 unit tests, no device or network required:
 
 ```
 test/
@@ -470,6 +500,8 @@ test/
 ├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
 ├── background_run_log_test.dart    The worker's own record of what it did
 ├── log_redaction_test.dart         Credentials never reach the exportable log
+├── multi_account_test.dart         Per-account storage, ids, wishlist copying
+├── account_migration_test.dart     The upgrade from one account to many
 ├── reauth_request_test.dart        The one call every session renewal goes through
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
 ├── session_and_utils_test.dart     JWT claims, token expiry, shard routing

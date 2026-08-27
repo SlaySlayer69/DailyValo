@@ -57,7 +57,7 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       overrides: <Override>[
-        appDependenciesProvider.overrideWithValue(deps),
+        appDependenciesProvider.overrideWith(() => AppGraph(deps)),
       ],
       child: DailyValoApp(initialTab: initialTab),
     ),

@@ -72,24 +72,106 @@ class LocalStore {
   }
 
   // ---------------------------------------------------------------------------
-  // Wishlist — one entry per skin UUID.
+  // Wishlist — one entry per skin UUID, per account.
   // ---------------------------------------------------------------------------
-  List<Map<String, dynamic>> readWishlist() {
-    return _wishlist.values
+  //
+  // One box with composite keys rather than a box per account: Hive boxes are
+  // files that have to be opened before use, and the background worker walks
+  // every account in turn. Prefixing is one string concatenation; opening N
+  // boxes is N file handles and N failure modes.
+
+  static String _wishlistKey(String accountId, String skinUuid) =>
+      '$accountId|$skinUuid';
+
+  List<Map<String, dynamic>> readWishlist(String accountId) {
+    final String prefix = '$accountId|';
+    return _wishlist.keys
+        .cast<String>()
+        .where((String k) => k.startsWith(prefix))
+        .map((String k) => _wishlist.get(k))
+        .whereType<String>()
         .map(_decodeMap)
         .whereType<Map<String, dynamic>>()
         .toList(growable: false);
   }
 
-  Future<void> putWishlistEntry(String skinUuid, Map<String, dynamic> json) =>
-      _wishlist.put(skinUuid, jsonEncode(json));
+  Future<void> putWishlistEntry(
+    String accountId,
+    String skinUuid,
+    Map<String, dynamic> json,
+  ) => _wishlist.put(_wishlistKey(accountId, skinUuid), jsonEncode(json));
 
-  Future<void> deleteWishlistEntry(String skinUuid) =>
-      _wishlist.delete(skinUuid);
+  Future<void> deleteWishlistEntry(String accountId, String skinUuid) =>
+      _wishlist.delete(_wishlistKey(accountId, skinUuid));
 
-  bool isWishlisted(String skinUuid) => _wishlist.containsKey(skinUuid);
+  bool isWishlisted(String accountId, String skinUuid) =>
+      _wishlist.containsKey(_wishlistKey(accountId, skinUuid));
 
-  Set<String> wishlistedSkinUuids() => _wishlist.keys.cast<String>().toSet();
+  Set<String> wishlistedSkinUuids(String accountId) {
+    final String prefix = '$accountId|';
+    return _wishlist.keys
+        .cast<String>()
+        .where((String k) => k.startsWith(prefix))
+        .map((String k) => k.substring(prefix.length))
+        .toSet();
+  }
+
+  /// Gives every unscoped wishlist entry to [accountId].
+  ///
+  /// The single-account layout keyed entries by skin UUID alone. Left as they
+  /// were they would belong to nobody and simply vanish, which is the one
+  /// piece of data in this app the user actually curated by hand.
+  Future<void> adoptUnscopedWishlist(String accountId) async {
+    final List<String> legacy = _wishlist.keys
+        .cast<String>()
+        .where((String k) => !k.contains('|'))
+        .toList(growable: false);
+
+    for (final String key in legacy) {
+      final String? value = _wishlist.get(key);
+      if (value == null) continue;
+      await _wishlist.put(_wishlistKey(accountId, key), value);
+      await _wishlist.delete(key);
+    }
+  }
+
+  /// Writes a wishlist entry the way the single-account layout did: keyed by
+  /// skin UUID alone, with no account prefix.
+  ///
+  /// Test-only, and it exists so the migration can be tested against the shape
+  /// it actually has to handle rather than an approximation of it.
+  @visibleForTesting
+  Future<void> putUnscopedWishlistEntry(
+    String skinUuid,
+    Map<String, dynamic> json,
+  ) => _wishlist.put(skinUuid, jsonEncode(json));
+
+  /// Moves one cached value to a new key, if it is there.
+  Future<void> moveCached(String from, String to) async {
+    final String? value = _cache.get(from);
+    if (value == null) return;
+    await _cache.put(to, value);
+    await _cache.delete(from);
+  }
+
+  /// Drops one account's cached server data.
+  ///
+  /// The **wishlist is deliberately kept**. It is the only thing in this app
+  /// the user assembled by hand, it is worth nothing to anyone else, and
+  /// per-account keys mean it can only ever be picked up again by the same
+  /// puuid — so signing out and back in restores it instead of starting from
+  /// an empty list. Everything else here is a copy of something Riot will hand
+  /// back on the next request.
+  Future<void> clearAccountCaches(String accountId) async {
+    for (final String key in <String>[
+      CacheKeys.shopSnapshot(accountId),
+      CacheKeys.notifiedOfferIds(accountId),
+      CacheKeys.ownedSkinLevels(accountId),
+      CacheKeys.playerProfile(accountId),
+    ]) {
+      await _cache.delete(key);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Cache — API payloads that survive restarts.
@@ -136,12 +218,7 @@ class LocalStore {
 
   /// Drops user-scoped data on sign-out. The content catalogue is intentionally
   /// kept — it is public, expensive to fetch, and identical for every account.
-  Future<void> clearUserData() async {
-    await _cache.delete(CacheKeys.lastShopSnapshot);
-    await _cache.delete(CacheKeys.lastNotifiedOfferIds);
-    await _cache.delete(CacheKeys.ownedSkinLevels);
-    await _cache.delete(CacheKeys.playerProfile);
-  }
+  Future<void> clearUserData(String accountId) => clearAccountCaches(accountId);
 
   static Map<String, dynamic>? _decodeMap(String raw) {
     try {

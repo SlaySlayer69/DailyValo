@@ -4,6 +4,37 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.3.0
+
+**More than one Riot account.** *Add account* signs in to another one and keeps
+the first; *Switch account* moves between them; *Sign out of all accounts*
+clears the device. Everything is per account — shop, collection, wishlist, rank,
+the lot — and switching does not reload the app, it swaps which account's data
+the tabs are reading.
+
+**Every account gets its own notification.** Two accounts rotating at the same
+02:00 produce two notifications rather than one quietly replacing the other, and
+the title is now the account name — *SlaySlayer* rather than *DailyValo*. Four
+skin names tell you nothing until you know whose four they are, and the app's
+own name was the one word on that line you already knew.
+
+**Wishlists are per account, and can be copied between them.** A *Copy* button
+on the wishlist adds this list to another account without overwriting anything:
+a skin the other account already wants keeps its own entry and its own place in
+the list. It reports how many were actually new, which is usually fewer than
+were copied — the two lists tend to overlap, and "copied 40" when 38 were
+already there reads as though something happened.
+
+Signing one account out keeps its wishlist. It is the only thing in the app
+assembled by hand, and adding the account back picks it up again.
+
+**Upgrading keeps everything.** Every stored value gained an account of its own,
+so the upgrade moves the existing session, cookie, wishlist, collection and shop
+history onto the account they belonged to. Without that step the app would have
+looked freshly installed while all of it sat on disk under names nothing reads
+any more. A failed migration is retried on the next launch rather than marked
+done.
+
 ## v3.2.1
 
 **Staying signed in.** DailyValo has never once managed to renew a session

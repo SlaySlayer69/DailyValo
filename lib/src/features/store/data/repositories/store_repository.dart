@@ -28,6 +28,7 @@ class StoreRepository {
     required WishlistRepository wishlist,
     required RiotSessionManager sessions,
     required LocalStore store,
+    required this.accountId,
     DemoStoreSource demo = const DemoStoreSource(),
   }) : _api = api,
        _content = content,
@@ -42,6 +43,9 @@ class StoreRepository {
   final RiotSessionManager _sessions;
   final LocalStore _store;
   final DemoStoreSource _demo;
+
+  /// Whose shop and collection this reads and caches.
+  final String accountId;
 
   bool get isDemoMode => _store.setting<bool>(SettingKeys.demoMode, false);
 
@@ -60,7 +64,7 @@ class StoreRepository {
     }
 
     snapshot ??= await _fetchSnapshot();
-    await _store.writeCached(CacheKeys.lastShopSnapshot, snapshot.toJson());
+    await _store.writeCached(CacheKeys.shopSnapshot(accountId), snapshot.toJson());
 
     return Shop.resolve(
       snapshot: snapshot,
@@ -82,7 +86,7 @@ class StoreRepository {
   /// offline path and by the background worker's change detection.
   StorefrontSnapshot? _readCachedSnapshot() {
     final Map<String, dynamic>? json = _store.readCachedMap(
-      CacheKeys.lastShopSnapshot,
+      CacheKeys.shopSnapshot(accountId),
     );
     if (json == null) return null;
     try {
@@ -111,14 +115,14 @@ class StoreRepository {
         puuid: session.puuid,
       );
     }
-    await _store.writeCached(CacheKeys.ownedSkinLevels, owned.toList());
+    await _store.writeCached(CacheKeys.ownedSkinLevels(accountId), owned.toList());
     return owned;
   }
 
   /// Cached owned-skin level UUIDs. Empty when nothing has synced yet.
   Set<String> readCachedOwnedSkins() {
     final List<dynamic>? raw = _store.readCachedList(
-      CacheKeys.ownedSkinLevels,
+      CacheKeys.ownedSkinLevels(accountId),
     );
     if (raw == null) return <String>{};
     return raw.whereType<String>().toSet();

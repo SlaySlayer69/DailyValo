@@ -11,6 +11,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../auth/data/models/account.dart';
 import '../../data/models/wishlist_entry.dart';
 import '../../data/wishlist_transfer.dart';
 
@@ -33,6 +34,7 @@ class _WishlistTransferBarState extends ConsumerState<WishlistTransferBar> {
   @override
   Widget build(BuildContext context) {
     final int count = ref.watch(wishlistControllerProvider).length;
+    final List<Account> others = _otherAccounts();
 
     return Row(
       children: <Widget>[
@@ -61,8 +63,81 @@ class _WishlistTransferBarState extends ConsumerState<WishlistTransferBar> {
             ),
           ),
         ),
+        // Only with somewhere to copy to. On a one-account device the button
+        // could do nothing but explain itself.
+        if (others.isNotEmpty) ...<Widget>[
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _busy || count == 0 ? null : _copyToAccount,
+              icon: const Icon(Icons.people_alt_outlined, size: 18),
+              label: const Text('Copy'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 46),
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  /// Copies this list onto another account, adding without overwriting.
+  Future<void> _copyToAccount() async {
+    final List<Account> others = _otherAccounts();
+    final Account? target = others.length == 1
+        ? others.single
+        : await showDialog<Account>(
+            context: context,
+            builder: (BuildContext dialogContext) => SimpleDialog(
+              backgroundColor: AppColors.backgroundElevated,
+              title: const Text('Copy wishlist to'),
+              children: <Widget>[
+                for (final Account account in others)
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.of(dialogContext).pop(account),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline_rounded),
+                      title: Text(account.gameName),
+                      subtitle: Text('#${account.tagLine}'),
+                    ),
+                  ),
+              ],
+            ),
+          );
+
+    if (target == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final int added = await ref
+          .read(wishlistRepositoryProvider)
+          .copyTo(target.puuid);
+      if (!mounted) return;
+      _toast(
+        added == 0
+            ? '${target.gameName} already has all of these.'
+            : 'Added $added ${added == 1 ? 'skin' : 'skins'} to '
+                  '${target.gameName}.',
+      );
+    } on Object catch (e, st) {
+      Log.e('Wishlist', 'Copy to another account failed', e, st);
+      if (mounted) _toast('Could not copy the wishlist.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  List<Account> _otherAccounts() {
+    final String current = ref.read(activeAccountProvider).puuid;
+    return ref
+        .read(accountRegistryProvider)
+        .all()
+        .where((Account a) => a.puuid != current)
+        .toList(growable: false);
   }
 
   Future<void> _export() async {

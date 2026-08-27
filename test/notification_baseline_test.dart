@@ -17,6 +17,10 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// These tests pin the separation, since the failure it prevents leaves no
 /// trace: nothing arrives, and nothing says why.
+
+/// A stand-in puuid. Everything per-account is keyed by one.
+const String kAccount = 'puuid-abc';
+
 void main() {
   late Directory tempDir;
   late LocalStore store;
@@ -33,7 +37,7 @@ void main() {
 
   Set<String>? readBaseline() {
     final List<dynamic>? raw = store.readCachedList(
-      CacheKeys.lastNotifiedOfferIds,
+      CacheKeys.notifiedOfferIds(kAccount),
     );
     if (raw == null) return null;
     return raw.whereType<String>().toSet();
@@ -43,20 +47,20 @@ void main() {
     test('is a different key from the shop cache', () {
       // If these ever collide the original bug is back, in full.
       expect(
-        CacheKeys.lastNotifiedOfferIds,
-        isNot(CacheKeys.lastShopSnapshot),
+        CacheKeys.notifiedOfferIds(kAccount),
+        isNot(CacheKeys.shopSnapshot(kAccount)),
       );
     });
 
     test('survives a shop fetch overwriting the cache', () async {
-      await store.writeCached(CacheKeys.lastNotifiedOfferIds, <String>[
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <String>[
         'offer-a',
         'offer-b',
       ]);
 
       // Exactly what `StoreRepository.getShop` does on every call, including
       // the one the UI makes when the tab opens.
-      await store.writeCached(CacheKeys.lastShopSnapshot, <String, dynamic>{
+      await store.writeCached(CacheKeys.shopSnapshot(kAccount), <String, dynamic>{
         'dailyOffers': <Map<String, String>>[
           <String, String>{'offerId': 'offer-c'},
         ],
@@ -66,7 +70,7 @@ void main() {
     });
 
     test('round trips a set of offer ids', () async {
-      await store.writeCached(CacheKeys.lastNotifiedOfferIds, <String>[
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <String>[
         'a',
         'b',
         'c',
@@ -83,18 +87,18 @@ void main() {
     });
 
     test('an empty recorded baseline reads back as empty, not null', () async {
-      await store.writeCached(CacheKeys.lastNotifiedOfferIds, <String>[]);
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <String>[]);
       expect(readBaseline(), isNotNull);
       expect(readBaseline(), isEmpty);
     });
 
     test('a corrupt baseline reads as null rather than throwing', () async {
-      await store.writeCachedString(CacheKeys.lastNotifiedOfferIds, 'not json');
+      await store.writeCachedString(CacheKeys.notifiedOfferIds(kAccount), 'not json');
       expect(readBaseline(), isNull);
     });
 
     test('non-string entries are dropped rather than crashing the sync', () async {
-      await store.writeCached(CacheKeys.lastNotifiedOfferIds, <dynamic>[
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <dynamic>[
         'a',
         42,
         null,
@@ -104,25 +108,40 @@ void main() {
     });
 
     test('signing out clears it alongside the shop cache', () async {
-      await store.writeCached(CacheKeys.lastNotifiedOfferIds, <String>['a']);
-      await store.writeCached(CacheKeys.lastShopSnapshot, <String, dynamic>{});
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <String>['a']);
+      await store.writeCached(CacheKeys.shopSnapshot(kAccount), <String, dynamic>{});
 
-      await store.clearUserData();
+      await store.clearUserData(kAccount);
 
       // Left behind, the next account's first shop would be compared against
       // the previous account's offers and announced as a rotation.
       expect(readBaseline(), isNull);
-      expect(store.readCachedMap(CacheKeys.lastShopSnapshot), isNull);
+      expect(store.readCachedMap(CacheKeys.shopSnapshot(kAccount)), isNull);
+    });
+
+    test('is scoped per account, so two accounts cannot collide', () async {
+      const String other = 'puuid-xyz';
+      await store.writeCached(CacheKeys.notifiedOfferIds(kAccount), <String>['a']);
+      await store.writeCached(CacheKeys.notifiedOfferIds(other), <String>['b']);
+
+      // Without scoping, the second account's shop would look like a rotation
+      // to the first every time the worker switched between them.
+      expect(readBaseline(), <String>{'a'});
+      await store.clearUserData(kAccount);
+      expect(
+        store.readCachedList(CacheKeys.notifiedOfferIds(other)),
+        <String>['b'],
+      );
     });
 
     test('the wishlist is not collateral damage of a sign-out', () async {
-      await store.putWishlistEntry('skin-1', <String, dynamic>{
+      await store.putWishlistEntry(kAccount, 'skin-1', <String, dynamic>{
         'skinUuid': 'skin-1',
       });
 
-      await store.clearUserData();
+      await store.clearUserData(kAccount);
 
-      expect(store.isWishlisted('skin-1'), isTrue);
+      expect(store.isWishlisted(kAccount, 'skin-1'), isTrue);
     });
   });
 }

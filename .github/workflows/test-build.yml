@@ -1,0 +1,129 @@
+name: Test build
+
+# Builds an APK from a branch and publishes it as a pre-release, without
+# merging anything.
+#
+# It exists because a test build has to be *installable over the real app*, and
+# that means the release signing key — which only CI has. An APK built anywhere
+# else is a different app to Android: the install fails, and the only way
+# through is to uninstall and lose the wishlist. A pre-release is downloadable
+# from a phone, and `make_latest: false` keeps it out of the way of the real
+# releases.
+
+# Two ways in:
+#   * push a tag like `test-v3.3.0-1` — works from *any* branch, which is the
+#     point: `workflow_dispatch` only offers workflows that already exist on the
+#     default branch, so it cannot build a branch before that branch is merged.
+#   * Actions > Test build > Run workflow — available once this file is on the
+#     default branch.
+on:
+  push:
+    tags:
+      - 'test-v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch to build'
+        required: true
+        type: string
+      note:
+        description: 'One line about what is being tested'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Name this build
+        id: name
+        run: |
+          version=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          # A dispatch invents its own tag; a tag push already has one.
+          if [ -n "${{ inputs.ref }}" ]; then
+            echo "tag=test-v$version-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+      # No debug-signing fallback here at all. The entire point of this workflow
+      # is producing something that installs over the existing app, and a
+      # debug-signed APK cannot.
+      - name: Unpack the signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::No signing key configured, so this build could not \
+          install over the released app. Run 'Generate a signing key' once."
+            exit 1
+          fi
+          echo "$KEYSTORE" | base64 -d > "${{ runner.temp }}/release.jks"
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --split-per-abi
+
+      - name: Name the APKs
+        run: |
+          v="${{ steps.name.outputs.version }}"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             "dist/DailyValo-$v-test-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             "dist/DailyValo-$v-test-armeabi-v7a.apk"
+
+      - name: Write the notes
+        run: |
+          {
+            echo "Test build of \`${{ inputs.ref || github.ref_name }}\` at \
+          \`${{ github.sha }}\`."
+            echo
+            if [ -n "${{ inputs.note }}" ]; then
+              echo "${{ inputs.note }}"
+              echo
+            fi
+            echo 'Signed with the release key, so it installs over the app you'
+            echo 'already have — no uninstall, nothing lost.'
+            echo
+            echo 'Not a release: nothing is merged, and this will not show up'
+            echo 'as the latest version.'
+          } > /tmp/notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.name.outputs.tag }}
+          target_commitish: ${{ inputs.ref || github.sha }}
+          name: Test build ${{ steps.name.outputs.tag }}
+          body_path: /tmp/notes.md
+          files: dist/*.apk
+          prerelease: true
+          make_latest: false

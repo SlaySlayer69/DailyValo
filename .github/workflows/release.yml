@@ -18,6 +18,14 @@ on:
         description: 'Version tag to release, e.g. v2.1.0'
         required: true
         type: string
+      prerelease:
+        description: >-
+          Publish as a pre-release instead of a release. Use it to get a signed,
+          installable APK out of a branch before it is merged: the build is
+          identical, but it is marked pre-release and does not become the
+          latest version, so nobody is offered unmerged code as an update.
+        type: boolean
+        default: false
       allow_debug_signing:
         description: >-
           Publish a test build when no signing key is configured. Leave this off
@@ -39,8 +47,11 @@ jobs:
         id: version
         run: |
           tag="${{ inputs.tag || github.ref_name }}"
+          number="${tag#v}"
+          # A pre-release carries a suffix the version in pubspec.yaml does not
+          # and should not: `v3.3.0-test.1` is still a build of 3.3.0.
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "number=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "number=${number%%-*}" >> "$GITHUB_OUTPUT"
 
       # Checks out the default branch, not the tag: on a manual run the tag
       # usually does not exist yet, and asking for it here fails the job before
@@ -71,6 +82,8 @@ jobs:
             exit 1
           fi
 
+      # A pre-release is cut from whatever branch was dispatched, so the
+      # checkout above must not silently be the default branch.
       - name: Tag this commit if the tag does not exist yet
         run: |
           tag='${{ steps.version.outputs.tag }}'
@@ -187,6 +200,17 @@ jobs:
             echo '| `universal` | Works everywhere, roughly 3× the size |'
           } >> /tmp/notes.md
 
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            {
+              echo
+              echo '> ### Pre-release'
+              echo '>'
+              echo '> Built from a branch that has not been merged. Signed with'
+              echo '> the release key, so it installs over the app you already'
+              echo '> have without an uninstall.'
+            } >> /tmp/notes.md
+          fi
+
           if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
             {
               echo
@@ -208,4 +232,7 @@ jobs:
           name: DailyValo ${{ steps.version.outputs.tag }}
           body_path: /tmp/notes.md
           files: dist/*.apk
-          make_latest: true
+          prerelease: ${{ inputs.prerelease }}
+          # Never let an unmerged pre-release become the version everyone is
+          # offered.
+          make_latest: ${{ inputs.prerelease != true }}

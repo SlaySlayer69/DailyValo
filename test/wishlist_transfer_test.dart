@@ -10,6 +10,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fixtures.dart';
 
+/// A stand-in puuid — every wishlist belongs to one account.
+const String kAccount = 'puuid-abc';
+
 void main() {
   group('WishlistTransfer format', () {
     test('round-trips a wishlist through its file format', () {
@@ -150,7 +153,7 @@ void main() {
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('dailyvalo_transfer');
       store = await LocalStore.initAt(tempDir.path);
-      wishlist = WishlistRepository(store: store);
+      wishlist = WishlistRepository(store: store, accountId: kAccount);
     });
 
     tearDown(() async {

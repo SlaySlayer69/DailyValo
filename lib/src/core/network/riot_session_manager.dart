@@ -97,7 +97,9 @@ class RiotSessionManager extends ChangeNotifier {
   Future<void> signOut() async {
     _session = null;
     await _secureStore.clear();
-    if (LocalStore.isReady) await LocalStore.instance.clearUserData();
+    if (LocalStore.isReady) {
+      await LocalStore.instance.clearUserData(_secureStore.accountId);
+    }
     notifyListeners();
   }
 }

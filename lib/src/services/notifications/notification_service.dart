@@ -7,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/utils/logger.dart';
+import '../../features/auth/data/models/account.dart';
 
 /// The app name, used verbatim as the notification title.
 const String kAppName = 'DailyValo';
@@ -28,8 +29,19 @@ const String kAppName = 'DailyValo';
 /// and keep the wishlist alert, without the app needing a settings screen for
 /// it.
 class NotificationService {
-  NotificationService({FlutterLocalNotificationsPlugin? plugin})
-    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  NotificationService({
+    Account account = Account.signedOut,
+    FlutterLocalNotificationsPlugin? plugin,
+  }) : _account = account,
+       _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+
+  /// Whose notifications these are.
+  ///
+  /// Two things come from it: the **title**, which is the account's game name
+  /// rather than the app's, because four offers mean nothing until you know
+  /// whose four they are; and the **ids**, so two accounts notified in the same
+  /// minute produce two notifications instead of one replacing the other.
+  final Account _account;
 
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialised = false;
@@ -51,14 +63,37 @@ class NotificationService {
 
   static const String _wishlistChannelId = 'dv_wishlist_alert';
 
-  /// Stable ids so a re-fired notification replaces the previous one rather
-  /// than stacking four copies of yesterday's shop in the shade.
-  static const int shopNotificationId = 1001;
-  static const int wishlistNotificationId = 1002;
+  /// Ids are `1000 + slot*10 + kind`.
+  ///
+  /// Stable per account, so a re-fired notification replaces that account's
+  /// previous one rather than stacking four copies of yesterday's shop — and
+  /// never touches another account's. The slot comes from the registry and is
+  /// not a list position, precisely so that removing an account cannot hand its
+  /// id to a different one.
+  static const int _shopKind = 1;
+  static const int _wishlistKind = 2;
+  static const int _testKind = 3;
 
-  /// The test digest gets its own id so trying it out cannot evict a real
-  /// delivery already queued for the morning.
-  static const int testNotificationId = 1003;
+  static int idFor(int slot, int kind) => 1000 + slot * 10 + kind;
+
+  int get shopNotificationId => idFor(_account.slot, _shopKind);
+  int get wishlistNotificationId => idFor(_account.slot, _wishlistKind);
+  int get testNotificationId => idFor(_account.slot, _testKind);
+
+  /// Every id this app could ever have used, for a device-wide clear.
+  static Iterable<int> get allPossibleIds sync* {
+    for (int slot = 0; slot < 64; slot++) {
+      yield idFor(slot, _shopKind);
+      yield idFor(slot, _wishlistKind);
+      yield idFor(slot, _testKind);
+    }
+  }
+
+  /// The title — the account's name, falling back to the app's before anyone
+  /// has signed in.
+  String get _title => _account.notificationTitle.isEmpty
+      ? kAppName
+      : _account.notificationTitle;
 
   static const AndroidNotificationChannel _shopChannel =
       AndroidNotificationChannel(
@@ -225,7 +260,7 @@ class NotificationService {
 
     await _plugin.show(
       id: shopNotificationId,
-      title: kAppName,
+      title: _title,
       body: _shopBody(offerLabels),
       notificationDetails: _shopDetails(offerLabels),
       payload: NotificationPayload.dailyShop,
@@ -237,7 +272,7 @@ class NotificationService {
   Future<void> showWishlistHit({List<String> matchedLabels = const <String>[]}) async {
     await _plugin.show(
       id: wishlistNotificationId,
-      title: kAppName,
+      title: _title,
       body: _wishlistBody,
       notificationDetails: _wishlistDetails(matchedLabels),
       payload: NotificationPayload.wishlistHit,
@@ -273,7 +308,7 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
       id: shopNotificationId,
-      title: kAppName,
+      title: _title,
       body: _shopBody(offerLabels),
       scheduledDate: at,
       notificationDetails: _shopDetails(offerLabels),
@@ -289,7 +324,7 @@ class NotificationService {
   }) async {
     await _plugin.zonedSchedule(
       id: wishlistNotificationId,
-      title: kAppName,
+      title: _title,
       body: _wishlistBody,
       scheduledDate: at,
       notificationDetails: _wishlistDetails(matchedLabels),
@@ -322,7 +357,7 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
       id: testNotificationId,
-      title: kAppName,
+      title: _title,
       body: _shopBody(labels),
       scheduledDate: at,
       notificationDetails: _shopDetails(labels),
@@ -410,7 +445,7 @@ class NotificationService {
         // Four skin names do not reliably fit on one collapsed line.
         styleInformation: BigTextStyleInformation(
           body,
-          contentTitle: kAppName,
+          contentTitle: _title,
         ),
       ),
     );
@@ -433,7 +468,7 @@ class NotificationService {
             ? null
             : BigTextStyleInformation(
                 '$_wishlistBody\n\n${matchedLabels.join('\n')}',
-                contentTitle: kAppName,
+                contentTitle: _title,
               ),
       ),
     );
@@ -464,7 +499,23 @@ class NotificationService {
     }
   }
 
-  Future<void> cancelAll() => _plugin.cancelAll();
+  /// Everything belonging to *this* account: queued and delivered alike.
+  ///
+  /// Used when one account is signed out. Deliberately not `cancelAll`, which
+  /// would take the other accounts' notifications with it — the ids are split
+  /// per account precisely so that cannot happen.
+  Future<void> cancelForThisAccount() async {
+    for (final int id in <int>[
+      shopNotificationId,
+      wishlistNotificationId,
+      testNotificationId,
+    ]) {
+      await _plugin.cancel(id: id);
+    }
+  }
+
+  /// Every account's notifications. For "sign out of all accounts".
+  Future<void> cancelEverything() => _plugin.cancelAll();
 
   /// The notification that launched the app, if any — lets a cold start from a
   /// wishlist alert open straight onto the shop.

@@ -199,14 +199,14 @@ class ShopSyncService {
   /// was empty" and should announce the next one.
   Set<String>? _lastNotifiedIds() {
     final List<dynamic>? raw = _deps.localStore.readCachedList(
-      CacheKeys.lastNotifiedOfferIds,
+      CacheKeys.notifiedOfferIds(_deps.accountId),
     );
     if (raw == null) return null;
     return raw.whereType<String>().toSet();
   }
 
   Future<void> _rememberNotified(Set<String> ids) => _deps.localStore
-      .writeCached(CacheKeys.lastNotifiedOfferIds, ids.toList(growable: false));
+      .writeCached(CacheKeys.notifiedOfferIds(_deps.accountId), ids.toList(growable: false));
 
   /// When the offers we are holding came up.
   ///

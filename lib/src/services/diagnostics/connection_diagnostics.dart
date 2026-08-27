@@ -9,7 +9,6 @@ import '../../features/store/data/models/competitive_standing.dart';
 import '../../features/store/data/models/rank_attempt.dart';
 import '../background/background_run_log.dart';
 import '../notifications/notification_schedule.dart';
-import '../notifications/notification_service.dart';
 
 /// One probe result.
 class DiagnosticResult {
@@ -333,11 +332,11 @@ class ConnectionDiagnostics {
     // anything Android had actually been told — the plugin does not report the
     // time an alarm is set for. Saying which alarm it is, is the honest limit.
     final List<String> waiting = <String>[
-      if (pending.contains(NotificationService.shopNotificationId))
+      if (pending.contains(_deps.notifications.shopNotificationId))
         'shop digest',
-      if (pending.contains(NotificationService.wishlistNotificationId))
+      if (pending.contains(_deps.notifications.wishlistNotificationId))
         'wishlist alert',
-      if (pending.contains(NotificationService.testNotificationId)) 'test',
+      if (pending.contains(_deps.notifications.testNotificationId)) 'test',
     ];
 
     if (!schedule.enabled) {
