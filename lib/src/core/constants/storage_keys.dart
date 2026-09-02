@@ -71,6 +71,14 @@ abstract final class CacheKeys {
   static String ownedSkinLevels(String accountId) =>
       'collection.ownedSkinLevels.$accountId';
 
+  /// Owned sprays, buddies, player cards and titles.
+  ///
+  /// Separate from the skins: they come from four different entitlement calls,
+  /// they refresh on a different cadence, and one being missing must not make
+  /// the other look empty.
+  static String ownedAccessories(String accountId) =>
+      'collection.ownedAccessories.$accountId';
+
   /// What the background worker last did, and how many times it has run.
   ///
   /// Survives a sign-out on purpose — it is about Android's willingness to

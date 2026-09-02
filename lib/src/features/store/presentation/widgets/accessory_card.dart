@@ -42,9 +42,24 @@ class AccessoryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Text(
-                  offer.subtitle.toUpperCase(),
-                  style: text.labelSmall,
+                Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        offer.subtitle.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.labelSmall,
+                      ),
+                    ),
+                    // Beside the kind rather than over the artwork: the
+                    // thumbnail is the only thing that identifies a spray, and
+                    // a badge across it would cover the part you are looking at.
+                    if (offer.isOwned) ...<Widget>[
+                      const SizedBox(width: AppSpacing.sm),
+                      const _OwnedTag(),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -60,7 +75,13 @@ class AccessoryCard extends StatelessWidget {
           CurrencyAmount(
             amount: offer.price,
             currency: Currency.kingdomCredits,
-            style: text.titleSmall?.copyWith(color: AppColors.textPrimary),
+            style: text.titleSmall?.copyWith(
+              // Dimmed rather than struck through or hidden: the price is still
+              // what it costs, it is just no longer a decision.
+              color: offer.isOwned
+                  ? AppColors.textSecondary
+                  : AppColors.textPrimary,
+            ),
           ),
         ],
       ),
@@ -111,6 +132,34 @@ class _Thumbnail extends StatelessWidget {
                 _ => Icons.category_outlined,
               },
             ),
+    );
+  }
+}
+
+/// Says an item is already in your inventory.
+///
+/// Small and quiet on purpose. It answers one question — "do I have this
+/// already?" — that otherwise costs a trip into the game to settle, and it has
+/// no business competing with the item's own name.
+class _OwnedTag extends StatelessWidget {
+  const _OwnedTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Text(
+        'OWNED',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: AppColors.textSecondary,
+          letterSpacing: 0.6,
+        ),
+      ),
     );
   }
 }

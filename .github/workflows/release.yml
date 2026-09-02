@@ -60,6 +60,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: subosito/flutter-action@v2
+        with:
+          # Pinned rather than read from pubspec.yaml, which carries only a Dart
+          # constraint. Every version in tool/versions.tsv was built with this.
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       # Deliberately before the tag is created: a mistyped version on a manual
       # run would otherwise leave a stray tag behind on a job that then failed,
       # and the second attempt would "already exist" pointing at nothing useful.
@@ -84,6 +97,29 @@ jobs:
 
       # A pre-release is cut from whatever branch was dispatched, so the
       # checkout above must not silently be the default branch.
+      # Before the tag, so the released commit carries a README that matches
+      # it. A stated version or test count that drifts is the kind of thing
+      # nobody notices until a stranger reads the front page.
+      #
+      # Skipped for a pre-release: that builds an unmerged branch, and pushing
+      # to the default branch from it would land changes nobody reviewed.
+      - name: Keep the README's facts current
+        if: inputs.prerelease != true
+        run: |
+          dart tool/check_readme.dart --write
+
+          if git diff --quiet -- README.md; then
+            echo "README.md was already current."
+            exit 0
+          fi
+
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'Update the README to match the release' \
+                     -m 'Version and test count, refreshed by tool/check_readme.dart.'
+          git push origin HEAD:"${{ github.event.repository.default_branch }}"
+
       - name: Tag this commit if the tag does not exist yet
         run: |
           tag='${{ steps.version.outputs.tag }}'
@@ -104,19 +140,6 @@ jobs:
           # Build from the tag either way, so a release is always exactly what
           # its tag points at — even if the branch moved on in the meantime.
           git checkout --detach "$tag"
-
-      - uses: subosito/flutter-action@v2
-        with:
-          # Pinned rather than read from pubspec.yaml, which carries only a Dart
-          # constraint. Every version in tool/versions.tsv was built with this.
-          flutter-version: '3.44.9'
-          channel: stable
-          cache: true
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
 
       - run: flutter pub get
       - run: flutter analyze

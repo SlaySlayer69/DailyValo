@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../core/constants/riot_constants.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../content/data/models/accessory_item.dart';
 import '../../../player/data/models/player_profile.dart';
 import '../models/competitive_standing.dart';
 import '../models/rank_attempt.dart';
@@ -100,6 +101,58 @@ class RiotStoreApi {
         .map((Map<String, dynamic> e) => e['ItemID'] as String?)
         .whereType<String>()
         .toSet();
+  }
+
+  /// Everything the player owns across the four accessory types.
+  ///
+  /// One request per type, because Riot's entitlements endpoint is keyed by
+  /// item type and there is no "give me everything" form. They run together
+  /// rather than in sequence: four round trips one after another is most of a
+  /// second on a phone, and this runs while the Accessory Store is already on
+  /// screen.
+  ///
+  /// A type that fails contributes nothing instead of failing the set. Sprays
+  /// answering when buddies do not is worth having — the alternative is
+  /// flagging none of them, which reads as owning none of them.
+  Future<Set<String>> fetchOwnedAccessories({
+    required String shard,
+    required String puuid,
+  }) async {
+    final List<Set<String>> perType = await Future.wait(
+      AccessoryKind.entitlementTypeIds.map(
+        (String typeId) => _fetchEntitlements(
+          shard: shard,
+          puuid: puuid,
+          typeId: typeId,
+        ),
+      ),
+    );
+
+    return <String>{for (final Set<String> ids in perType) ...ids};
+  }
+
+  Future<Set<String>> _fetchEntitlements({
+    required String shard,
+    required String puuid,
+    required String typeId,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        RiotConstants.entitlementsByType(shard, puuid, typeId),
+      );
+
+      final Object? entitlements = _asMap(response.data)['Entitlements'];
+      if (entitlements is! List) return <String>{};
+
+      return entitlements
+          .whereType<Map<String, dynamic>>()
+          .map((Map<String, dynamic> e) => e['ItemID'] as String?)
+          .whereType<String>()
+          .toSet();
+    } on Object catch (e) {
+      Log.d('Store', 'Entitlements for $typeId failed: $e');
+      return <String>{};
+    }
   }
 
   /// The player's current competitive tier and RR.

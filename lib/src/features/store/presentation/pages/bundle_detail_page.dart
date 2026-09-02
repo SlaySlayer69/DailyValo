@@ -300,6 +300,19 @@ class _BundleItemRow extends StatelessWidget {
                           const SizedBox(width: AppSpacing.sm),
                           TierBadge(tier: item.tier, compact: true),
                         ],
+                        // The question a bundle actually raises: how much of
+                        // this do I already have? Without it the only way to
+                        // answer is to check each item in the game.
+                        if (item.isOwned) ...<Widget>[
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            'OWNED',
+                            style: text.labelSmall?.copyWith(
+                              color: AppColors.textTertiary,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 2),

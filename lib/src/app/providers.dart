@@ -7,6 +7,7 @@ import '../core/network/riot_session_manager.dart';
 import '../core/network/webview_cookie_reader.dart';
 import '../core/storage/local_store.dart';
 import '../core/storage/secure_token_store.dart';
+import '../core/utils/logger.dart';
 import '../features/auth/data/account_registry.dart';
 import '../features/auth/data/datasources/riot_auth_api.dart';
 import '../features/auth/data/models/account.dart';
@@ -68,6 +69,7 @@ class AppGraph extends Notifier<AppDependencies> {
     ref.invalidate(shopControllerProvider);
     ref.invalidate(playerControllerProvider);
     ref.invalidate(ownedSkinsProvider);
+    ref.invalidate(ownedAccessoriesProvider);
     ref.invalidate(wishlistControllerProvider);
   }
 }
@@ -269,10 +271,16 @@ final FutureProvider<ContentCatalog> contentCatalogProvider =
 
 class ShopController extends AsyncNotifier<Shop> {
   @override
-  Future<Shop> build() {
+  Future<Shop> build() async {
     // Re-resolve whenever the wishlist changes so the heart on a shop card and
     // the "on your wishlist" banner stay in sync without a manual refresh.
     ref.watch(wishlistControllerProvider);
+
+    // Awaited before the shop is resolved, not alongside it: ownership is read
+    // out of the cache by `getShop`, so resolving first would produce a shop
+    // with nothing marked and only fix itself on the next rebuild.
+    await ref.watch(ownedAccessoriesProvider.future);
+
     return ref.read(storeRepositoryProvider).getShop();
   }
 
@@ -400,6 +408,26 @@ final FutureProvider<Set<String>> ownedSkinsProvider =
       final Set<String> cached = repository.readCachedOwnedSkins();
       if (cached.isNotEmpty) return cached;
       return repository.refreshOwnedSkins();
+    });
+
+/// UUIDs of every spray, buddy, card and title the player owns.
+///
+/// Fetched on the same terms as the skins — cache first, network only when
+/// there is nothing yet — and swallowing a failure rather than propagating it.
+/// An ownership marker is a nicety; the Accessory Store has to render whether
+/// or not the entitlements calls answered, and an empty set simply means
+/// nothing is marked.
+final FutureProvider<Set<String>> ownedAccessoriesProvider =
+    FutureProvider<Set<String>>((Ref ref) async {
+      final StoreRepository repository = ref.watch(storeRepositoryProvider);
+      final Set<String> cached = repository.readCachedOwnedAccessories();
+      if (cached.isNotEmpty) return cached;
+      try {
+        return await repository.refreshOwnedAccessories();
+      } on Object catch (e) {
+        Log.d('Store', 'Owned accessories unavailable: $e');
+        return <String>{};
+      }
     });
 
 /// The owned skins, resolved and sorted by rarity then name.

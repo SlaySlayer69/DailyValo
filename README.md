@@ -8,8 +8,11 @@ chromas and upgrade levels. It tells you when your shop rotates, at an hour you
 pick, and separately when something you are actually hunting for shows up.
 
 > DailyValo is not affiliated with, endorsed by, or sponsored by Riot Games. It
-> uses the same undocumented client endpoints the official desktop client uses.
+> uses the same undocumented client endpoints the official desktop client uses,
+> and is read-only — it never buys, equips or changes anything.
 > See [Security and Riot's APIs](#security-and-riots-apis).
+
+**Current version: v3.4.0** · Android 7.0+ (`minSdk 24`) · 279 tests
 
 ---
 
@@ -17,227 +20,90 @@ pick, and separately when something you are actually hunting for shows up.
 
 | Tab | What it does |
 | --- | --- |
-| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
-| **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
-| **Wishlist** | Exportable and importable as a file. Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
-| **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those — and the tab shows what the selection is worth at shop prices. |
+| **Daily Shop** | The four daily offers with artwork, weapon and skin name, VP price and rarity, under a live countdown to reset. Below them the **Accessory Store** — sprays, buddies, cards and titles in Kingdom Credits, with anything you already own marked — and the **Featured Bundles**: tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
+| **Night Market** | Discounted offers with the original price, the discount and your total savings. Says so plainly when no market is running. |
+| **Wishlist** | Searchable picker over the full catalogue in buy-menu order. Entries in today's shop are flagged. Exportable and importable as a file, and copyable to another account. |
+| **Collection** | Every skin you own, grouped and counted by rarity. The counts double as filters, and the tab shows what the selection is worth at shop prices. |
 
-Everywhere: a persistent header with your Riot ID, competitive rank, and your
-Valorant Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail page with the full render, every
-colour variant, and each upgrade level labelled with what it unlocks (VFX,
-sound effects, animation, finisher, …).
+A persistent header carries your Riot ID, competitive rank and your Valorant
+Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail
+page with the full render, every colour variant, and each upgrade level labelled
+with what it unlocks.
 
-**Preview clips.** Riot publishes short MP4s for most levels and for chromas
-with unique VFX. Tapping a level plays its clip; a `PREVIEW` button on the
-artwork plays the clip for the selected variant, falling back to the base
-skin's when that variant has none. A still image cannot show you what a
-finisher does.
+**Preview clips.** Riot publishes short clips for most levels and for chromas
+with unique VFX; a still image cannot show you what a finisher does.
 
-**Three clocks, not one.** The shop tab runs three independent countdowns
-because Riot runs three independent schedules: the four daily skins roll over at
-00:00 UTC, the Accessory Store rotates weekly, and each Featured Bundle leaves
-on its own date. Sharing one timer would have shown the wrong number on two of
-the three sections, so each section carries its own — and each refetches the
-storefront when it reaches zero, rather than displaying `00:00:00` over stale
-offers.
+**Three clocks, not one.** The daily skins roll over at 00:00 UTC, the Accessory
+Store rotates weekly, and each bundle leaves on its own date — so each section
+carries its own countdown and refetches when it reaches zero.
+
+**Sharing.** A share button on the Daily Shop and the Night Market renders the
+offers as a card and hands it to the share sheet. A purpose-built image, not a
+screenshot.
+
+**Home screen widget.** Four tiles in a 2×2 grid on black, each showing a skin
+from today's shop framed in the colour of its rarity. Updates with the
+background check; tapping it opens the shop.
 
 ### Accounts
 
-Several Riot accounts can be signed in at once. **Identity is the puuid**, never
-the Riot ID — a Riot ID can be changed, and two accounts can hold the same one at
-different times. Every stored value is keyed by it: session, cookie, wishlist,
-shop snapshot, notification baseline, collection, profile.
+Several Riot accounts can be signed in at once. Everything is kept per account:
+shop, collection, wishlist, rank, wallet and notifications. *Add account*,
+*Switch account* and *Sign out of all accounts* live at the bottom of settings.
 
-Each account also carries a **slot**, a small stable number allocated on first
-sign-in, and notification ids are derived from it (`1000 + slot*10 + kind`). A
-position in the account list would not do: removing the first of three accounts
-shifts the others down, and the notification Android is already holding for one
-would suddenly belong to another — replacing it, or being cancelled by it.
+Signing one account out leaves the others signed in and keeps that account's
+wishlist, so adding it back picks it up again.
 
-The background check walks every account in turn, each with its own graph, and
-one account's expired cookie does not stop the rest being checked. Notifications
-are titled with the account's game name rather than the app's, because four skin
-names say nothing until you know whose four they are.
-
-Switching accounts builds a second graph and puts it in place of the first
-rather than mutating anything, so repositories never learn that accounts can
-change. The upgrade from the single-account layout is tested harder than the
-feature itself: it moves session, cookie, wishlist and caches onto the account
-they belonged to, and a failure leaves its "done" flag unset so the next launch
-retries. Skipping it would have made an upgrade look like a fresh install, with
-everything still on disk under names nothing reads any more.
-
-Signing an account out keeps its wishlist, keyed by the same puuid. It is the
-one thing here the user assembled by hand and the one thing Riot cannot hand
-back; adding the account again picks it up.
+Accounts are identified by puuid rather than Riot ID — a Riot ID can be changed,
+and two accounts can hold the same one at different times.
 
 ### Notifications
 
-Two notifications, two Android channels, deliberately different:
+Two notifications on two Android channels, so either can be turned down from
+Android's own settings without touching the other.
 
 | | Daily shop | Wishlist hit |
 | --- | --- | --- |
 | Fires when | The four offers rotate | A wishlisted skin is among them |
-| Importance | `high` — sound + vibration | `high` — sound + vibration |
-| Title | `DailyValo` | `DailyValo` |
+| Title | The account's name, e.g. `SlaySlayer` | The account's name |
 | Body | `Prime Vandal - Reaver Sheriff - Ion Phantom - Karambit` | `An item on your wishlist is in your shop!` |
 
-Separate channels mean a user can silence the daily digest and keep the
-wishlist alert from Android's own settings, with no in-app toggle required
-(though there are toggles too, under the header's ⋮ menu).
-
-The digest started out silent, on the reasoning that nobody asks to be woken at
-02:00 for a shop summary. Adding a delivery time retired that reasoning:
-somebody who has chosen 09:30 wants to hear about it at 09:30, and a silent
-notification is one you find later or not at all. The channel id carries a `_v2`
-suffix because of it — a channel's importance and sound are frozen the moment
-Android first sees it, so re-declaring the old id would have changed nothing on
-any device that had already run the app and the change would have appeared to
-work only on a fresh install. The old channel is deleted at start-up.
-
-**What counts as "new".** A rotation is detected by comparing the current offer
-ids against *the ones the user was last told about* — a record with its own
-storage key, written only after a notification has actually gone out. The
-obvious shortcut, comparing against the cached shop, is wrong in a way that is
-invisible until someone complains: that cache is overwritten by every fetch,
-including the one the Daily Shop tab makes when the app opens. Opening the app
-at 02:00 to look at the fresh shop wrote the new offers into the baseline before
-anything compared against them, so the rotation was consumed silently and its
-notification could never fire. `test/notification_baseline_test.dart` pins the
-separation, including that a cache write leaves the baseline alone and that
-"never notified" stays distinguishable from "notified about an empty shop".
-
-The check runs on first frame as well as on resume. `didChangeAppLifecycleState`
-is not called on a cold start — the app is already `resumed` when the observer
-is registered — so wiring it to resume alone meant launching from the launcher,
-which is how anyone opens the app at two in the morning, checked nothing.
-
-**The receiver.** `zonedSchedule` hands AlarmManager a PendingIntent aimed at
-`ScheduledNotificationReceiver`, which the app must declare itself —
-flutter_local_notifications stopped shipping it in its own manifest in v16.
-Without the declaration the alarm is accepted, stored and listed as pending, and
-then dropped when it fires because there is nothing to deliver the broadcast to.
-Nothing is logged; from Android's side nothing went wrong. Immediate `show()`
-calls never touch that path, so the feature looks healthy until someone sets a
-delivery time. `test/android_manifest_test.dart` asserts both receivers and the
-three permissions are present, because a Dart suite never builds the Android app
-and would otherwise never notice them disappearing.
-
-**Testing it.** Settings ▸ *Test the shop notification* queues the real digest a
-minute out through the same `zonedSchedule` call, channel and alarm mode as a
-reset does. The row exists because the intuitive check — set the delivery time
-ten minutes ahead and wait — cannot work: an alarm is armed only when a rotation
-is *detected*, and that happens once a day. Nothing arrives, and the honest
-conclusion from outside is that the feature is broken.
-
-**Developer mode and the log.** Diagnostics and the notification test sit behind
-a switch at the bottom of settings, together with a detailed log that records
-every request and response, the shop check, notification scheduling, and each
-background run under its own `[bg]` tag. It exports to a dated file through the
-share sheet.
-
-Redaction happens at the sink, not at the call sites. The log exists to be sent
-to someone, and every Riot endpoint is authenticated with a bearer token that
-works until it expires — the `ssid` cookie does not even expire, it mints new
-tokens. JWTs are matched on shape rather than on the field name carrying them,
-so a token in an unexpected payload is caught too, and the mask is a fixed
-string so the length of what was removed does not leak either.
-`test/log_redaction_test.dart` covers the sign-in redirect fragment (which is
-how a whole token set used to arrive in one URL) and, just as deliberately, that
-an ordinary log line comes through unchanged — an over-redacted log is useless,
-which is its own failure.
-
-**Watching the watcher.** The nightly check runs in its own isolate, in a
-process nobody sees, at a time Android chooses — so when a notification does not
-arrive there is nothing to look at. "The check never ran", "it ran and could not
-sign in", "it ran and found nothing new" and "it ran and its alarm was dropped"
-are the same silence and have nothing in common as problems. The worker
-therefore records every run — time, count, outcome or exception — before and
-after the work, and the diagnostics screen reads it back. The count discriminates
-the one case the app cannot fix: zero runs after a night means Android is not
-starting the task, which is battery optimisation, reported on the same screen
-with a shortcut to the system setting that lifts it.
-
-The dispatcher calls `DartPluginRegistrant.ensureInitialized()`. WorkManager
-builds a `FlutterEngine`, which brings up the Android-side plugin registrant but
-not the Dart-side one, and a plugin missing there throws on first use — killing
-the run before it can schedule anything, without a trace.
+Both alert with sound and a banner. Each signed-in account gets its own, so two
+accounts rotating at the same time produce two notifications rather than one
+replacing the other.
 
 **Delivery time.** By default both fire as soon as the rotation is noticed,
-which is the freshest answer but lands at 02:00 in much of Europe. Settings ▸
-*Notification time* holds them back to an hour you pick. Detection still happens
-at reset — only the delivery moves, and nothing about the shop changes in
-between, so a held notification is still correct when it arrives. The alarm is
-handed to Android via `zonedSchedule` rather than waking a worker at the chosen
-hour: the OS delivers it whether or not the app gets scheduled, and it survives
-a reboot.
+which lands at 02:00 in much of Europe. Settings ▸ *Notification time* holds
+them back to an hour you pick. Detection still happens at reset, so what arrives
+at 09:30 is exactly what rotated at 02:00.
 
-The alarm is **exact when Android permits it and inexact when it does not**.
-`SCHEDULE_EXACT_ALARM` is declared and requested at the moment the delivery time
-is switched on — the only moment the app has a time to be punctual about — and a
-refusal costs punctuality rather than the notification. It matters more than it
-sounds: an inexact alarm is batched into the next Doze maintenance window, so a
-digest set for 09:00 can land at 09:20 on a phone that slept through the night,
-with nothing actually broken. The diagnostics screen reports which of the two is
-in force.
+The chosen time is a wall clock in your own timezone, resolved against the IANA
+database — so 09:30 is still 09:30 on the two days a year the clocks move. The
+alarm is exact where Android permits it; the permission is requested when you
+switch the delivery time on, and refusing it costs punctuality rather than the
+notification.
 
-Delivery is anchored to the **rotation**, not to the moment the app noticed it.
-Computing it from *now* meant a background check that Android deferred past the
-chosen hour scheduled the digest for that hour *tomorrow*, and the day it was
-about passed in silence — a phone asleep from 02:00 to 09:20 got nothing at all.
-`deliveryFor` resolves the first occurrence of the chosen wall clock after the
-rotation, and posts immediately when that instant is already behind us.
+Neither notification expires on its own and neither is sticky: one stays until
+it is swiped, opened, or cleared by opening the app.
 
-Nothing sets a timeout on either notification and neither is `ongoing`, so one
-stays in the shade until it is swiped, opened, or cleared by opening the app.
-That last part cancels only ids Android reports as *currently showing*:
-`cancel(id:)` removes a posted notification and a queued alarm under the same
-id alike, so clearing the shade indiscriminately would silently delete the 09:00
-delivery of anyone who opened the app at 08:00.
+**If one does not arrive**, Settings ▸ *Allow background checks* opens the system
+screen that lifts battery optimisation. It is the one setting that can stop the
+nightly check outright while everything inside the app looks healthy.
 
-The chosen time is a **wall clock in the device's own timezone**, read via
-`flutter_timezone` and resolved against the IANA database. That is not
-pedantry: computing the target by adding nine hours to midnight lands at 10:00
-on the day the clocks go forward, because a duration is absolute and a clock
-change is not. Building the moment from wall-clock components in a real zone
-gets both transitions right, and the notification plugin stores the zone
-alongside the alarm so a reboot re-arms against the same wall clock rather than
-the same offset. Both clock-change days are covered by tests against the real
-database.
+### Developer mode
 
-**Sharing.** The share button renders a purpose-built card off-screen and hands
-the PNG to Android's share sheet — not a screenshot, so there is no status bar,
-no half-scrolled list, and it looks the same from every phone. The skins sit
-side by side with the artwork given most of each tile: a shop is something you
-*look* at, so the name and price are the caption rather than the subject.
+Off by default, at the bottom of settings. It reveals:
 
-Two constraint traps live here, both of which shipped broken once and are now
-pinned by tests. An overlay child is limited to the screen, so a card asking for
-1420 logical pixels was silently rendered at the phone's 411 with 1420-scale
-type inside it. And `OverflowBox` forwards the parent's *minimum* constraints
-unless told otherwise, which inflates a card narrower than the screen to screen
-size and bakes a margin of empty background into the image. `test/share_card_test.dart`
-asserts the exact canvas width for one, four and six offers, that the wordmark
-is centred to within a pixel, and that long names such as *Singularity Sheriff*
-are not cut to an ellipsis.
-
-**The home screen widget** is four skin renders in a 2x2 grid on black, each
-framed in the colour of its rarity, with no text at all. A grid rather than a
-row of four: a weapon render is wide, and four tiles side by side are tall
-strips that waste most of their height on empty background while shrinking the
-skin to fit the narrow width. RemoteViews cannot load a URL, so the
-artwork is downloaded by the app and the paths handed to the widget provider,
-which decodes them in the app's own process and passes bitmaps through the
-RemoteViews parcel — a `file://` URI from app-private storage is not readable by
-the launcher. The frame is a tinted box behind a black-backed image, because
-RemoteViews can set a background colour but cannot restyle a drawable's stroke.
-
-**What a collection is worth.** Riot publishes no prices and no purchase
-history, so the Collection total is derived from the price points Riot uses per
-rarity — doubled for melee, which is priced differently and is exactly what
-people collect. That makes it an estimate of what the skins *cost*, never of
-what was paid: Night Market and bundle discounts leave no trace the app can
-read. Skins that were never sold are counted separately rather than guessed at.
+* **Diagnostics** — every Riot endpoint probed separately with what it returned,
+  plus notification permission, exact-alarm permission, queued alarms, whether
+  the background check has been running, and whether battery optimisation is
+  restricting it.
+* **Test the shop notification** — queues your real digest a minute out through
+  the same path a reset uses. Moving the delivery time ten minutes ahead tests
+  nothing: an alarm is armed only when a rotation is *detected*, once a day.
+* **Detailed log** — records requests, the shop check, notification scheduling
+  and each background run, and exports as a dated file. Tokens and the session
+  cookie are stripped before anything is written, so the file is safe to send.
 
 ---
 
@@ -246,26 +112,26 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 268 unit tests, no device needed
+flutter test                # 279 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
-Requires Flutter 3.44+ / Dart 3.12+. Android only for now (`minSdk 24`).
+Requires Flutter 3.44+ / Dart 3.12+. Android only for now.
+
+Releases are built and published by GitHub Actions — see
+[`docs/RELEASING.md`](docs/RELEASING.md).
 
 ### Demo mode
 
 Tap **Explore in demo mode** on the sign-in screen. No Riot account, no
 credentials, no network calls to Riot at all.
 
-Demo mode is a first-class app mode, not a stub: it fetches the *real* content
-catalogue from `valorant-api.com`, so all artwork, names, rarities, chromas and
+It is a first-class app mode, not a stub: the *real* content catalogue is
+fetched from `valorant-api.com`, so artwork, names, rarities, chromas and
 upgrade levels are genuine — only the offers are synthesised. They are seeded by
-the calendar day, so the shop is stable for 24 hours and genuinely rotates at
-00:00 UTC, which means the reset detection and notification pipeline can be
-exercised end to end without waiting for a real reset.
-
-Use **Settings → Check my shop now** to run the background worker's exact logic
-on demand.
+the calendar day, so the shop is stable for 24 hours and rotates at 00:00 UTC,
+which means the reset detection and the notification pipeline can be exercised
+end to end without waiting for a real reset.
 
 ---
 
@@ -279,20 +145,18 @@ lib/
 ├── main.dart                        Bootstrap: graph → workmanager → runApp
 └── src/
     ├── app/
-    │   ├── app.dart                 MaterialApp + AuthGate
-    │   ├── dependencies.dart        The object graph (see below)
+    │   ├── dependencies.dart        The object graph
     │   ├── providers.dart           Riverpod view over the graph
     │   └── theme/                   Colours, type scale, ThemeData
     ├── core/
     │   ├── constants/               Riot endpoints, UUIDs, storage keys
     │   ├── errors/                  Sealed AppException family
-    │   ├── network/                 Dio factories, auth + error interceptors,
-    │   │                            session manager, client-version holder
+    │   ├── network/                 Dio factories, interceptors, session manager
+    │   ├── platform/                Battery-optimisation channel
     │   ├── storage/                 Secure token store, Hive façade
-    │   ├── utils/                   JWT reader, formatters, logger
-    │   └── widgets/                 RemoteImage, Countdown, state views
+    │   └── utils/                   JWT reader, formatters, logger
     ├── features/
-    │   ├── auth/                    RSO login, MFA, silent re-auth
+    │   ├── auth/                    RSO login, account registry, silent re-auth
     │   ├── content/                 valorant-api.com catalogue + cache
     │   ├── player/                  Riot ID, rank, wallet → header
     │   ├── store/                   Storefront, night market, accessories,
@@ -302,23 +166,20 @@ lib/
     │   ├── skin_detail/             Artwork, chromas, upgrade levels
     │   └── home/                    Tab shell + settings sheet
     └── services/
-        ├── notifications/           Channels and the two notification shapes
+        ├── notifications/           Channels, schedule, the two shapes
+        ├── logging/                 File sink and redaction
         ├── widgets/                 Home screen widget bridge
-        └── background/              WorkManager dispatcher + sync service
+        └── background/             WorkManager dispatcher + sync service
 ```
 
-### The object graph lives outside Riverpod
+**The object graph lives outside Riverpod.** `AppDependencies.bootstrap()`
+builds it as a plain object, scoped to one account. The WorkManager isolate
+starts cold — no widget tree, no `ProviderScope`, no shared state with `main()`
+— and builds the same graph for each signed-in account in turn. Riverpod is a
+thin read-only view over it for the widgets, so switching accounts swaps the
+graph rather than mutating anything.
 
-`AppDependencies.bootstrap()` builds the entire graph as a plain object. It is
-called **twice per device**: once by `main()`, once by the WorkManager isolate.
-
-That is the reason it is not a set of Riverpod providers. A background isolate
-has no widget tree, no `ProviderScope`, and no shared state with `main()` — it
-starts cold. Building the graph as a plain class means the worker and the UI are
-provably wired the same way, and `app/providers.dart` is a thin read-only view
-over it for the widgets.
-
-### Data flow
+**Data flow.**
 
 ```
 valorant-api.com ──► ContentRepository ──┐
@@ -329,206 +190,92 @@ Riot PD /storefront ─► StoreRepository ──┤
 Hive wishlist ─────► WishlistRepository ─┘
 ```
 
-The storefront returns nothing but UUIDs and prices. Everything human-readable
-comes from joining those UUIDs against the content catalogue — which is why the
-raw `StorefrontSnapshot` and the resolved `Shop` are separate types. The
-background worker persists and compares snapshots without ever loading the 4 MB
-catalogue.
+The storefront returns nothing but UUIDs and prices; everything human-readable
+comes from joining them against the content catalogue. That is why the raw
+`StorefrontSnapshot` and the resolved `Shop` are separate types — the background
+worker compares snapshots without ever loading the 4 MB catalogue.
 
-### Riot's content types are not uniform
-
-Dio only parses a response body when its `content-type` announces JSON. Riot
-does that on the wallet, storefront and entitlements routes but **not** on the
-MMR ones — those return the same JSON under a content type Dio leaves alone, so
-`response.data` arrives as a `String`.
-
-Every map lookup against a string yields nothing, so a 19 KB rank record read
-as "no rank" and the header confidently displayed *Unranked* for a ranked
-player. HTTP 200, no exception, nothing in the logs. `JsonResponseInterceptor`
-normalises this for every PD client, and the parsing layer decodes a raw string
-too rather than trusting that it was already handled.
-
-### Detecting a shop reset
-
-Not by clock. By **comparing the persisted set of offer ids** to the freshly
-fetched one.
-
-A wall clock is not trustworthy here: the device may be asleep past 00:00 UTC,
-Doze can defer a worker for hours, the timezone can change mid-flight, and the
-user can travel. The offer set is the only honest signal that a rotation
-happened, and it is idempotent — a double fire costs one wasted request.
-
-Two overlapping schedules feed it:
-
-* a **one-off** task aimed three minutes after the next known reset (accurate,
-  re-armed on every sync);
-* a **periodic** task every six hours (catches the one-off being dropped by
-  Doze, app standby, or a reboot).
-
-Plus a foreground check on app resume, since that costs the user nothing.
-
-### State management
-
-Riverpod 2, no code generation. `AsyncNotifier` for the shop and player header,
-`Notifier` for the wishlist and app mode, `Provider.family` for per-skin
-wishlist state so a heart tap rebuilds one card rather than the grid.
-
-The countdown timer is deliberately **not** in app state — a second-resolution
-clock in a provider would rebuild the whole shop sixty times a minute. It lives
-in a `StatefulWidget` that repaints only the four characters that changed.
+**Detecting a rotation.** The current offer ids are compared against *the ones
+the user was last told about*, a record with its own storage key written only
+after a notification has gone out. Comparing against the cached shop instead
+looks equivalent and is not: that cache is overwritten by every fetch, including
+the one the Daily Shop tab makes when the app opens.
 
 ---
 
 ## Security and Riot's APIs
 
-### App icon
-
-A DV monogram: grey D, red V, near-black where the two planes cross, on a dark
-radial ground. Ships as an adaptive icon (background + foreground + monochrome
-layers) plus legacy square and round PNGs for API 24–25. The glyph is
-constrained to a 48x44 box inside the 108 grid so every corner stays within the
-66dp keyline circle — otherwise round and squircle launcher masks slice the V.
-`tool/generate_app_icon.py` regenerates every density.
+Sign-in happens in a **WebView on Riot's own hosted login page**. The app never
+sees the password, and two-factor codes and the Riot Mobile confirmation prompt
+behave exactly as they do in a browser. Later refreshes replay the RSO cookie
+against `/authorize`, which is what lets the background isolate renew a session
+without a WebView.
 
 ### What is stored, and where
 
 | Data | Where | Why |
 | --- | --- | --- |
-| Password | **Nowhere** | Typed into Riot's own page in a WebView; never seen by the app. |
-| RSO `ssid` cookie | Android Keystore (AES-GCM, RSA-wrapped) | Mints fresh access tokens without the password. Revocable by the user server-side. |
-| Access / entitlements / id tokens | Android Keystore | Expire in ~1 hour; refreshed silently. |
-| Wishlist, catalogue, shop snapshot | Hive (plain files) | Not sensitive. Nothing credential-shaped ever goes in a Hive box. |
+| Password | **Nowhere** | Typed into Riot's own page; never seen by the app. |
+| RSO `ssid` cookie | Android Keystore, per account | Mints fresh access tokens without the password. Revocable server-side by you. |
+| Access / entitlements / id tokens | Android Keystore, per account | Expire in ~1 hour; refreshed silently. |
+| Wishlist, catalogue, shop snapshot | Hive (plain files), per account | Not sensitive. Nothing credential-shaped goes in a Hive box. |
+| Detailed log | A plain file, only while switched on | Tokens and the session cookie are stripped at the point of writing, so the file is safe to share. |
 
-Sign-out deletes every credential and cancels all background work. The
-`Log` helper is a no-op in release builds, because request bodies in this app
-carry bearer tokens and Android log buffers are readable by more things than
-you would like.
-
-### The auth flow
-
-Sign-in happens in a **WebView on Riot's own hosted login page**. The app never
-sees the password.
-
-```
-(WebView) GET /authorize          → user signs in on Riot's page
-                                    (2FA, captcha, Riot Mobile push — all theirs)
-          → 303 playvalorant.com/opt_in#access_token=…
-POST entitlements/api/token/v1    → X-Riot-Entitlements-JWT
-POST /userinfo                    → PUUID + Riot ID
-PUT  /pas/v1/product/valorant     → PAS token → live affinity → PD shard
-```
-
-The direct username/password endpoint was tried first and removed. It cannot
-complete a sign-in for any account Riot protects with push confirmation or a
-captcha: it answers `auth_failure` even when the password is correct, which is
-indistinguishable from a typo and impossible for a user to act on.
-
-Later refreshes skip the WebView entirely: the `ssid` cookie captured from its
-jar is replayed against `GET /authorize`, which 303s back with a fresh token
-pair. That is what lets the **background isolate** refresh tokens — a WebView
-needs an Activity and cannot run from WorkManager.
-
-The cookie is read through a small `MethodChannel` rather than
-`webview_flutter`'s own `getCookies`, which splits each cookie on every `=` and
-keeps the last segment — silently truncating an opaque token that contains one.
-A truncated `ssid` would sign you in once and then quietly break every refresh
-afterwards.
-
-**`Accept: */*` on that call is load-bearing.** The auth client sets
-`Accept: application/json` on every request, which is right for the JSON
-endpoints it was built for and wrong for `/authorize` — a browser endpoint that
-answers with a 303 and a `Location`, and that returns **HTTP 406** when asked
-for JSON. Every silent renewal in the app's life failed on that, the failure
-read as "the cookie is dead", the app signed itself out about an hour after each
-sign-in, and a signed-out background worker skips every run. The visible
-symptoms were a login button that signed you straight back in without asking for
-anything, and a shop notification that never arrived. `test/reauth_request_test.dart`
-pins the header, along with `followRedirects: false` and the parameter set.
-
-Only a 302/303 that lands somewhere other than the redirect URI counts as an
-expired cookie. Any other status is treated as transient and retried: signing
-out clears the cookie a renewal needs, so reading one odd response as "expired"
-made the state unrecoverable rather than temporary.
-
-The cookie is re-read on **every app resume**, not just at sign-in, and a stored
-one is enough to rebuild a whole session on its own — `signInWithStoredCookie`
-needs nothing from a previous session, because a session is exactly what a token
-pair plus an entitlements JWT already is. Both of those exist because the
-failure they prevent is close to silent. If the capture at sign-in came back
-empty, or Riot rotated the cookie since, the next refresh fails with
-`requiresReLogin`, the session manager signs you out, and the visible symptom is
-a *Login with Riot* button that signs you straight in again without asking for
-anything — mildly annoying, and easy to live with. What is not visible is that
-`canFetchShop` is now false, so every background run skips, no rotation is ever
-detected, and no notification is ever scheduled. Nothing arrives to tell you
-nothing arrived.
+Signing out of an account deletes its credentials and cached server data; its
+wishlist is kept, since only you could reconstruct it. Signing out of the last
+account cancels all background work and clears the home screen widget.
 
 ### Two things worth knowing before you ship this
 
 1. **These endpoints are undocumented.** They are the same ones the official
-   client uses, and they are stable in practice, but Riot owes no compatibility
-   here. Riot's third-party developer policy prohibits automating gameplay and
-   misrepresenting affiliation; a read-only shop viewer is the same shape as
-   the many community trackers that exist, but you should read the current
-   policy yourself before publishing. Every endpoint and constant is centralised
-   in `core/constants/riot_constants.dart` so an upstream change is a one-file
-   fix.
+   client uses and are stable in practice, but Riot owes no compatibility here.
+   Riot's third-party developer policy prohibits automating gameplay and
+   misrepresenting affiliation; a read-only shop viewer is the same shape as the
+   many community trackers that exist, but read the current policy yourself
+   before publishing. Every endpoint and constant is centralised in
+   `core/constants/riot_constants.dart`, so an upstream change is a one-file fix.
 
-2. **The app no longer handles credentials at all.** Sign-in is a WebView on
-   Riot's page; DailyValo only ever receives the redirect at the end. Keep it
-   that way — reintroducing a password field would both weaken this and break
-   sign-in for push-protected accounts.
+2. **The app does not handle credentials at all.** Keep it that way —
+   reintroducing a password field would both weaken this and break sign-in for
+   push-protected accounts.
 
 ---
 
 ## Testing
 
-268 unit tests, no device or network required:
+279 unit tests, no device or network required. `flutter test` runs them all.
 
-```
-test/
-├── storefront_parser_test.dart     Riot payload → snapshot, incl. malformed input
-├── content_catalog_test.dart       UUID → skin resolution, cache round trip
-├── shop_resolution_test.dart       Joining offers to names/owned/wishlist state
-├── accessories_and_bundles_test.dart
-│                                   Accessory/bundle parsing, resolution,
-│                                   bundle contents, separate reset clocks
-├── wishlist_repository_test.dart   Hive persistence and shop matching
-├── notification_format_test.dart   Locks in the two notification body formats
-├── notification_schedule_test.dart Delivery time: rotation-anchored, real DST days
-├── notification_baseline_test.dart "Already told them about these?" vs the shop cache
-├── android_manifest_test.dart      Receivers/permissions scheduled alarms need
-├── background_run_log_test.dart    The worker's own record of what it did
-├── log_redaction_test.dart         Credentials never reach the exportable log
-├── multi_account_test.dart         Per-account storage, ids, wishlist copying
-├── account_migration_test.dart     The upgrade from one account to many
-├── reauth_request_test.dart        The one call every session renewal goes through
-├── demo_store_source_test.dart     Determinism, pricing, reset timing
-├── session_and_utils_test.dart     JWT claims, token expiry, shard routing
-├── web_login_test.dart             Cookie-header parsing, redirect detection
-├── wallet_and_rank_test.dart       Currency UUIDs, unranked-vs-unknown
-├── store_api_test.dart             PD endpoint parsing and fallbacks (stubbed HTTP)
-└── support/fixtures.dart           Realistic API payloads
+The suite leans on the places where being wrong is invisible: the notification
+body formats (product spec, not implementation detail), the delivery time across
+both clock-change days, per-account storage isolation, the manifest entries
+scheduled alarms depend on, and that no credential can reach the exportable log.
+
+`tool/check_readme.dart` keeps this file honest — see below.
+
+---
+
+## Keeping this file current
+
+The version and test count above are checked, not remembered:
+
+```bash
+dart tool/check_readme.dart          # fails if a stated fact has drifted
+dart tool/check_readme.dart --write  # updates them in place
 ```
 
-The notification format test exists because those strings are product spec, not
-implementation detail — a refactor should not be able to change them silently.
+It runs as part of every release, so a published version always ships a README
+that matches it. Prose is still a human job; this only guarantees the numbers.
 
 ---
 
 ## Known gaps
 
-Deliberately out of scope for this pass, in rough priority order:
-
-* **Bundle contents.** A bundle shows its key art, price, discount and item
-  count, but not the list of skins inside it — that needs a second lookup per
-  bundle against the catalogue's item references.
-* **Accessory ownership.** Owned sprays, buddies and cards are not flagged the
-  way owned skins are; the entitlements call for those item types is not wired
-  up yet.
-* **Localisation.** The UI is English-only; the *content* language is already
-  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so
-  adding `flutter_localizations` would finish the job.
+* **Localisation.** The UI is English-only. The *content* language is already
+  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so what
+  is left is `flutter_localizations` plus ARB files — about 186 user-facing
+  strings across 24 files, several interpolated or pluralised. Mechanical rather
+  than hard, but German runs roughly 30% longer than English: the real work is
+  checking a dense shop grid for overflow on a device, not the translation.
 * **iOS.** The Dart is platform-agnostic, but only the Android host project is
   configured, and iOS background execution would need `BGTaskScheduler`
   identifiers in `Info.plist`.

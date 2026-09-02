@@ -18,6 +18,15 @@ enum AccessoryKind {
   static const String playerTitleTypeId =
       'de7caa6b-adf7-4588-bbd1-143831e786c6';
 
+  /// The four types the entitlements endpoint is asked about, so a new kind
+  /// added above cannot be silently left out of the ownership check.
+  static const List<String> entitlementTypeIds = <String>[
+    sprayTypeId,
+    buddyTypeId,
+    playerCardTypeId,
+    playerTitleTypeId,
+  ];
+
   static AccessoryKind fromTypeId(String? typeId) => switch (typeId) {
     sprayTypeId => AccessoryKind.spray,
     buddyTypeId => AccessoryKind.buddy,

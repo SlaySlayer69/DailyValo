@@ -167,6 +167,7 @@ class LocalStore {
       CacheKeys.shopSnapshot(accountId),
       CacheKeys.notifiedOfferIds(accountId),
       CacheKeys.ownedSkinLevels(accountId),
+      CacheKeys.ownedAccessories(accountId),
       CacheKeys.playerProfile(accountId),
     ]) {
       await _cache.delete(key);
