@@ -4,6 +4,24 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.4.0
+
+**Accessories you already own are marked.** Sprays, gun buddies, player cards
+and titles now say *Owned* in the Accessory Store and inside a bundle's item
+list, the way skins always have. It answers the one question a weekly rotation
+actually raises — do I have this already? — which until now cost a trip into the
+game to settle.
+
+An offer that grants several things counts as owned only when you own all of
+them. One that throws in a spray you have alongside a buddy you do not is still
+worth buying, and marking it owned would talk you out of it.
+
+The four item types are fetched together rather than one after another, and a
+type that fails contributes nothing instead of failing the rest: sprays
+answering when buddies do not is worth having. Nothing is marked at all until
+the answers arrive, so a failed call reads as "not known" rather than "you own
+none of these".
+
 ## v3.3.0
 
 **More than one Riot account.** *Add account* signs in to another one and keeps

@@ -73,6 +73,7 @@ class AccessoryOffer {
     required this.offerId,
     required this.items,
     required this.price,
+    this.isOwned = false,
   });
 
   final String offerId;
@@ -82,6 +83,13 @@ class AccessoryOffer {
 
   /// Price in Kingdom Credits.
   final int price;
+
+  /// Every item in the offer is already in the player's inventory.
+  ///
+  /// All of them, not any: an offer granting a spray you have and a buddy you
+  /// do not is still worth buying, and marking it owned would talk you out of
+  /// it.
+  final bool isOwned;
 
   AccessoryItem get primary => items.first;
 
@@ -105,6 +113,7 @@ class BundleItem {
     this.skin,
     this.tier,
     this.accessory,
+    this.isOwned = false,
     this.amount = 1,
     this.isPromoItem = false,
   });
@@ -124,6 +133,10 @@ class BundleItem {
 
   /// Set when the item is a spray, buddy, card or title.
   final AccessoryItem? accessory;
+
+  /// Already in the player's inventory — worth knowing before buying a bundle
+  /// for the two things in it you do not have.
+  final bool isOwned;
 
   final int amount;
   final bool isPromoItem;
@@ -262,6 +275,7 @@ class Shop {
     required StorefrontSnapshot snapshot,
     required ContentCatalog catalog,
     Set<String> ownedSkinUuids = const <String>{},
+    Set<String> ownedAccessoryUuids = const <String>{},
     Set<String> wishlistedSkinUuids = const <String>{},
   }) {
     final List<ShopOffer> daily = <ShopOffer>[];
@@ -308,7 +322,15 @@ class Shop {
       // An offer whose rewards are all unknown would render as a blank row.
       if (items.isEmpty) continue;
       accessories.add(
-        AccessoryOffer(offerId: raw.offerId, items: items, price: raw.cost),
+        AccessoryOffer(
+          offerId: raw.offerId,
+          items: items,
+          price: raw.cost,
+          // Every item, not any — see AccessoryOffer.isOwned.
+          isOwned: items.every(
+            (AccessoryItem i) => ownedAccessoryUuids.contains(i.uuid),
+          ),
+        ),
       );
     }
 
@@ -326,7 +348,12 @@ class Shop {
             itemCount: raw.itemCount,
             endsAt: raw.endsAt,
             info: catalog.bundleByUuid(raw.bundleUuid),
-            items: _resolveBundleItems(raw.items, catalog),
+            items: _resolveBundleItems(
+              raw.items,
+              catalog,
+              ownedSkinUuids: ownedSkinUuids,
+              ownedAccessoryUuids: ownedAccessoryUuids,
+            ),
             wholesaleOnly: raw.wholesaleOnly,
           ),
         )
@@ -357,8 +384,10 @@ class Shop {
   /// look at; the sprays and cards are padding by comparison.
   static List<BundleItem> _resolveBundleItems(
     List<RawBundleItem> raw,
-    ContentCatalog catalog,
-  ) {
+    ContentCatalog catalog, {
+    required Set<String> ownedSkinUuids,
+    required Set<String> ownedAccessoryUuids,
+  }) {
     final List<BundleItem> skins = <BundleItem>[];
     final List<BundleItem> extras = <BundleItem>[];
 
@@ -374,6 +403,8 @@ class Shop {
             tier: catalog.tierOf(skin),
             amount: item.amount,
             isPromoItem: item.isPromoItem,
+            // A bundle lists skin *levels*; ownership is recorded the same way.
+            isOwned: ownedSkinUuids.contains(item.itemId),
           ),
         );
         continue;
@@ -389,6 +420,7 @@ class Shop {
           accessory: accessory,
           amount: item.amount,
           isPromoItem: item.isPromoItem,
+          isOwned: ownedAccessoryUuids.contains(item.itemId),
         ),
       );
     }

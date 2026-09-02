@@ -17,7 +17,7 @@ pick, and separately when something you are actually hunting for shows up.
 
 | Tab | What it does |
 | --- | --- |
-| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
+| **Daily Shop** | The four daily offers with high-res artwork, weapon + skin name, VP price, rarity, and a live countdown to reset. Below them, the **Accessory Store** (sprays, buddies, cards, titles in Kingdom Credits) on its own weekly countdown, with anything you already own marked, and the **Featured Bundles** with their key art, discount and time left — tap one to see every item in it, what each costs alone, which is free, and whether the bundle can be split. |
 | **Night Market** | Discounted offers with original price, discount percentage and total savings. Says so plainly when no market is running. |
 | **Wishlist** | Exportable and importable as a file. Searchable picker over the full skin catalogue, in buy-menu order — weapon class, then weapon, then rarity. Entries in today's shop are flagged inline. Tapping a skin opens its detail page, here as everywhere else — the heart is the only control that adds or removes, and removal is undoable. |
 | **Collection** | Every skin you own, grouped and counted by rarity. The rarity counts double as filters — tap Ultra and Premium to see only those — and the tab shows what the selection is worth at shop prices. |
@@ -246,7 +246,7 @@ read. Skins that were never sold are counted separately rather than guessed at.
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 268 unit tests, no device needed
+flutter test                # 275 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -483,7 +483,7 @@ nothing arrived.
 
 ## Testing
 
-268 unit tests, no device or network required:
+275 unit tests, no device or network required:
 
 ```
 test/
@@ -501,6 +501,7 @@ test/
 ├── background_run_log_test.dart    The worker's own record of what it did
 ├── log_redaction_test.dart         Credentials never reach the exportable log
 ├── multi_account_test.dart         Per-account storage, ids, wishlist copying
+├── accessory_ownership_test.dart   Owned sprays/buddies/cards, and the type ids
 ├── account_migration_test.dart     The upgrade from one account to many
 ├── reauth_request_test.dart        The one call every session renewal goes through
 ├── demo_store_source_test.dart     Determinism, pricing, reset timing
@@ -520,15 +521,13 @@ implementation detail — a refactor should not be able to change them silently.
 
 Deliberately out of scope for this pass, in rough priority order:
 
-* **Bundle contents.** A bundle shows its key art, price, discount and item
-  count, but not the list of skins inside it — that needs a second lookup per
-  bundle against the catalogue's item references.
-* **Accessory ownership.** Owned sprays, buddies and cards are not flagged the
-  way owned skins are; the entitlements call for those item types is not wired
-  up yet.
-* **Localisation.** The UI is English-only; the *content* language is already
-  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so
-  adding `flutter_localizations` would finish the job.
+* **Localisation.** The UI is English-only. The *content* language is already
+  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so what
+  is left is `flutter_localizations` plus ARB files — about 186 user-facing
+  strings across 24 presentation files, several of them interpolated or
+  pluralised. Mechanical rather than hard, but it touches every widget, and
+  German runs roughly 30% longer than English: the real work is checking a dense
+  shop grid for overflow on a device, not the translation.
 * **iOS.** The Dart is platform-agnostic, but only the Android host project is
   configured, and iOS background execution would need `BGTaskScheduler`
   identifiers in `Info.plist`.

@@ -70,6 +70,7 @@ class StoreRepository {
       snapshot: snapshot,
       catalog: catalog,
       ownedSkinUuids: readCachedOwnedSkins(),
+      ownedAccessoryUuids: readCachedOwnedAccessories(),
       wishlistedSkinUuids: _wishlist.skinUuids,
     );
   }
@@ -117,6 +118,34 @@ class StoreRepository {
     }
     await _store.writeCached(CacheKeys.ownedSkinLevels(accountId), owned.toList());
     return owned;
+  }
+
+  /// Refreshes the accessories the player owns and caches them.
+  ///
+  /// Demo mode owns none: the demo source synthesises offers, and inventing an
+  /// inventory to go with them would put "Owned" on items nobody has.
+  Future<Set<String>> refreshOwnedAccessories() async {
+    if (isDemoMode) return <String>{};
+
+    final RiotSession session = _requireSession();
+    final Set<String> owned = await _api.fetchOwnedAccessories(
+      shard: session.shard,
+      puuid: session.puuid,
+    );
+    await _store.writeCached(
+      CacheKeys.ownedAccessories(accountId),
+      owned.toList(),
+    );
+    return owned;
+  }
+
+  /// Cached owned accessory UUIDs. Empty when nothing has synced yet.
+  Set<String> readCachedOwnedAccessories() {
+    final List<dynamic>? raw = _store.readCachedList(
+      CacheKeys.ownedAccessories(accountId),
+    );
+    if (raw == null) return <String>{};
+    return raw.whereType<String>().toSet();
   }
 
   /// Cached owned-skin level UUIDs. Empty when nothing has synced yet.
