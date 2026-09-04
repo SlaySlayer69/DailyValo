@@ -80,6 +80,12 @@ class ShopSyncService {
     // copy in the meantime.
     await HomeWidgetService.update(shop);
 
+    // Independent of the daily rotation, and checked on every run rather than
+    // only on one that found new offers: a Night Market opens on its own
+    // schedule, and gating it behind a daily rotation would delay the alert by
+    // up to a day for the one notification here that is genuinely time-limited.
+    await _checkNightMarket(shop);
+
     // First run has no baseline. Record it silently rather than announcing a
     // "new" shop the user has been looking at all day.
     if (notified == null) {
@@ -190,6 +196,75 @@ class ShopSyncService {
     Log.d('Sync', 'Notifications deferred to $at');
     return at;
   }
+
+  /// Announces a Night Market that has just opened.
+  ///
+  /// Fires on the transition from "none running" to "one running", not on its
+  /// presence. A market lasts days; repeating the alert every background run
+  /// for a week is the fastest way to get the channel muted.
+  ///
+  /// The recorded flag is the market's own end date rather than a bare boolean,
+  /// so a second market opening after the first has closed is a new event even
+  /// if the app never observed the gap between them.
+  Future<void> _checkNightMarket(Shop shop) async {
+    final String key = CacheKeys.nightMarketSeen(_deps.accountId);
+    final String? announced = _deps.localStore.readCachedString(key);
+    final String? current = nightMarketMarker(shop);
+
+    if (current == null) {
+      // Forget the closed one, so the next market is an arrival again.
+      if (announced != null) await _deps.localStore.deleteCached(key);
+      return;
+    }
+
+    if (!isNewNightMarket(announced: announced, current: current)) return;
+
+    await _deps.localStore.writeCachedString(key, current);
+
+    final bool wants = _deps.localStore.setting<bool>(
+      SettingKeys.nightMarketNotificationsEnabled,
+      true,
+    );
+    if (!wants) return;
+
+    final Set<String> wishlisted = _deps.wishlist.skinUuids;
+    final List<String> matches = shop.nightMarket
+        .where((NightMarketDeal d) => wishlisted.contains(d.skin.uuid))
+        .map((NightMarketDeal d) => d.skin.notificationLabel)
+        .toList(growable: false);
+
+    int best = 0;
+    for (final NightMarketDeal deal in shop.nightMarket) {
+      if (deal.discountPercent > best) best = deal.discountPercent;
+    }
+
+    await _deps.notifications.showNightMarket(
+      dealCount: shop.nightMarket.length,
+      bestDiscount: best,
+      wishlistLabels: matches,
+    );
+    Log.d('Sync', 'Night Market opened — ${shop.nightMarket.length} deals');
+  }
+
+  /// What is recorded for a running Night Market, or null when none is running.
+  ///
+  /// The market's own end date rather than a bare flag: two markets in a row —
+  /// one closing and another opening between two background runs — are one
+  /// unbroken "a market is running" as far as a boolean is concerned, and the
+  /// second would never be announced. The end date differs, so it is.
+  ///
+  /// The `open` fallback covers a market Riot reports without a duration, which
+  /// still beats staying silent about it.
+  static String? nightMarketMarker(Shop shop) {
+    if (!shop.hasNightMarket) return null;
+    return shop.nightMarketEndsAt?.toIso8601String() ?? 'open';
+  }
+
+  /// Whether the running market is one the user has not been told about.
+  static bool isNewNightMarket({
+    required String? announced,
+    required String current,
+  }) => announced != current;
 
   /// The offers the user has already been told about, or null on a device that
   /// has never been told anything.

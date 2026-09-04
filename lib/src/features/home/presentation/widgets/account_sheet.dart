@@ -21,6 +21,7 @@ import '../../../../services/diagnostics/connection_diagnostics.dart';
 import '../../../../services/logging/log_file.dart';
 import '../../../../services/notifications/notification_schedule.dart';
 import '../../../../services/notifications/notification_service.dart';
+import 'account_switcher.dart';
 
 /// Account and notification settings, reached from the header.
 ///
@@ -75,6 +76,10 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     );
     final bool wishlistNotifications = store.setting<bool>(
       SettingKeys.wishlistNotificationsEnabled,
+      true,
+    );
+    final bool nightMarketNotifications = store.setting<bool>(
+      SettingKeys.nightMarketNotificationsEnabled,
       true,
     );
     final NotificationSchedule schedule = NotificationSchedule.read(store);
@@ -136,13 +141,31 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
             ),
 
             SwitchListTile.adaptive(
+              value: nightMarketNotifications,
+              onChanged: (bool value) => _setSetting(
+                SettingKeys.nightMarketNotificationsEnabled,
+                value,
+              ),
+              title: const Text('Night Market alert'),
+              subtitle: const Text(
+                'Tells you once when a Night Market opens',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+
+            SwitchListTile.adaptive(
               value: schedule.enabled,
               onChanged: _setFixedTime,
               title: const Text('Notification time'),
+              // Names the two it holds back. The Night Market alert is not one
+              // of them: it fires on an opening that can happen at any hour,
+              // and delaying it would eat into a market that is already
+              // counting down.
               subtitle: Text(
                 schedule.enabled
-                    ? 'Both notifications arrive at ${schedule.label}'
-                    : 'Both notifications arrive at shop reset (00:00 UTC)',
+                    ? 'Shop and wishlist alerts arrive at ${schedule.label}'
+                    : 'Shop and wishlist alerts arrive at shop reset '
+                          '(00:00 UTC)',
               ),
               contentPadding: EdgeInsets.zero,
             ),
@@ -553,38 +576,14 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
     }
   }
 
+  /// The same picker the header opens — see [switchAccount].
   Future<void> _switchAccount() async {
-    final List<Account> accounts = ref.read(accountRegistryProvider).all();
-    final Account current = ref.read(activeAccountProvider);
-
-    final Account? picked = await showDialog<Account>(
-      context: context,
-      builder: (BuildContext dialogContext) => SimpleDialog(
-        backgroundColor: AppColors.backgroundElevated,
-        title: const Text('Switch account'),
-        children: <Widget>[
-          for (final Account account in accounts)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(account),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  account.puuid == current.puuid
-                      ? Icons.check_circle_rounded
-                      : Icons.circle_outlined,
-                  color: account.puuid == current.puuid
-                      ? AppColors.accent
-                      : null,
-                ),
-                title: Text(account.gameName),
-                subtitle: Text('#${account.tagLine}'),
-              ),
-            ),
-        ],
-      ),
+    final Account? picked = await AccountSwitcher.open(
+      context,
+      accounts: ref.read(accountRegistryProvider).all(),
+      active: ref.read(activeAccountProvider),
     );
-
-    if (picked == null || picked.puuid == current.puuid || !mounted) return;
+    if (picked == null || !mounted) return;
 
     setState(() => _busy = true);
     await ref.read(appModeProvider.notifier).switchTo(picked);

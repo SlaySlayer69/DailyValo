@@ -18,6 +18,7 @@ import '../features/content/data/repositories/content_repository.dart';
 import '../features/player/data/models/player_profile.dart';
 import '../features/player/data/repositories/player_repository.dart';
 import '../features/store/data/models/shop.dart';
+import '../features/store/data/models/shop_sightings.dart';
 import '../features/store/data/repositories/store_repository.dart';
 import '../features/wishlist/data/models/wishlist_entry.dart';
 import '../features/wishlist/data/repositories/wishlist_repository.dart';
@@ -297,6 +298,46 @@ final AsyncNotifierProvider<ShopController, Shop> shopControllerProvider =
     AsyncNotifierProvider<ShopController, Shop>(ShopController.new);
 
 // -----------------------------------------------------------------------------
+// Drought counter
+// -----------------------------------------------------------------------------
+
+/// The skins on offer right now, by skin UUID.
+///
+/// Keyed by skin rather than by offer id, because everything that asks this
+/// question — the catalogue, the detail page, the wishlist — holds a skin.
+final Provider<Set<String>> skinsInShopTodayProvider = Provider<Set<String>>((
+  Ref ref,
+) {
+  final Shop? shop = ref.watch(shopControllerProvider).valueOrNull;
+  if (shop == null) return const <String>{};
+  return shop.dailyOffers.map((ShopOffer o) => o.skin.uuid).toSet();
+});
+
+/// Every sighting recorded for the active account.
+///
+/// Watches the shop controller because that is what writes them: a resolved
+/// shop records today's offers, and this has to be re-read afterwards or the
+/// detail page would still say "not seen" about a skin sitting in the grid
+/// behind it.
+final Provider<ShopSightings> shopSightingsProvider = Provider<ShopSightings>((
+  Ref ref,
+) {
+  ref.watch(shopControllerProvider);
+  return ref.watch(storeRepositoryProvider).readSightings(DateTime.now());
+});
+
+/// How long the user has been waiting for one particular skin.
+final ProviderFamily<SkinAvailability, String> skinAvailabilityProvider =
+    Provider.family<SkinAvailability, String>((Ref ref, String skinUuid) {
+      return SkinAvailability.of(
+        skinUuid: skinUuid,
+        inShopToday: ref.watch(skinsInShopTodayProvider),
+        sightings: ref.watch(shopSightingsProvider),
+        now: DateTime.now(),
+      );
+    });
+
+// -----------------------------------------------------------------------------
 // Player header
 // -----------------------------------------------------------------------------
 
@@ -453,3 +494,21 @@ final FutureProvider<List<WeaponSkin>> collectionProvider =
       });
       return skins;
     });
+
+/// The collection as *skin* UUIDs, for "do I own this?".
+///
+/// [ownedSkinsProvider] holds skin *level* UUIDs, which is what the entitlements
+/// endpoint returns and what the storefront quotes — neither is the id anything
+/// in the UI holds. Resolving once here beats every caller walking a skin's
+/// levels against the raw set.
+///
+/// Empty while the collection is still loading, which reads as "not owned" —
+/// the honest default: an owned marker that has not arrived yet is missing, and
+/// a missing marker is better than a wrong one.
+final Provider<Set<String>> ownedSkinUuidsProvider = Provider<Set<String>>((
+  Ref ref,
+) {
+  final List<WeaponSkin>? owned = ref.watch(collectionProvider).valueOrNull;
+  if (owned == null) return const <String>{};
+  return owned.map((WeaponSkin s) => s.uuid).toSet();
+});

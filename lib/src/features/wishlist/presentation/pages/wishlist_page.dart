@@ -10,6 +10,7 @@ import '../../../content/data/models/content_catalog.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../../../skin_detail/presentation/pages/skin_detail_page.dart';
 import '../../../store/data/models/shop.dart';
+import '../../../store/presentation/widgets/drought_indicator.dart';
 import '../../data/models/wishlist_entry.dart';
 import '../widgets/skin_picker_sheet.dart';
 import '../widgets/wishlist_transfer_bar.dart';
@@ -211,27 +212,16 @@ class _WishlistTile extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                         style: text.titleMedium,
                       ),
-                      if (isInShop) ...<Widget>[
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            const Icon(
-                              Icons.local_fire_department_rounded,
-                              size: 13,
-                              color: AppColors.accent,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'In your shop today',
-                              style: text.bodySmall?.copyWith(
-                                color: AppColors.accent,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 4),
+                      // The whole point of a wishlist is the waiting, so each
+                      // row says how long it has been — "in your shop today"
+                      // included, which is the same statement with the answer
+                      // zero.
+                      DroughtLine(
+                        availability: ref.watch(
+                          skinAvailabilityProvider(entry.skinUuid),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),

@@ -4,6 +4,43 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.5.0
+
+**How long you have been waiting.** Every skin now carries a drought counter —
+*last seen 47 days ago*, *never seen*, or *in your shop today* — on its detail
+page, on the wishlist and on every tile in the new catalogue.
+
+Riot publishes no shop history: the storefront is a snapshot of today and
+nothing else, and there is no endpoint that will tell you when a skin last came
+up. So DailyValo writes it down itself, one rotation at a time, and records when
+it started watching. That second part is why "never seen" reads *not seen in the
+19 days tracked so far* rather than a flat *never* — on a fresh install the
+first version would be a claim about the app, dressed up as a claim about your
+shop.
+
+The record is kept per account and survives a sign-out, because nothing can
+rebuild it. Signing back in picks the history up where it left off.
+
+**A skin catalogue.** A fifth tab holding every skin Riot has ever sold, with
+search over skin and weapon names, filters for rarity, weapon class, owned /
+not owned and wishlisted, and five sort orders — including *longest unseen*,
+which turns the drought record into a list of what your shop has been
+withholding. Tapping a skin opens the same detail page the shop does.
+
+**Night Market alert.** A notification when a market opens, on its own channel
+and its own switch in settings, naming any wishlisted skins in it and the best
+discount on offer. It fires once per market rather than daily while one runs,
+and it is checked on every background run rather than only when the daily shop
+rotates — a market runs for days, and hearing about it on day three is most of
+the way to not hearing about it.
+
+Delivery time does not hold this one back. The other two describe a shop that
+cannot change until tomorrow; a market is already counting down.
+
+**Switch accounts from the header.** Tapping your Riot ID opens the account
+picker, when there is a second account to switch to. It was two taps deep in
+settings, past everything about notifications.
+
 ## v3.4.0
 
 **Accessories you already own are marked.** Sprays, gun buddies, player cards

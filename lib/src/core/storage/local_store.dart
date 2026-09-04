@@ -156,12 +156,16 @@ class LocalStore {
 
   /// Drops one account's cached server data.
   ///
-  /// The **wishlist is deliberately kept**. It is the only thing in this app
-  /// the user assembled by hand, it is worth nothing to anyone else, and
-  /// per-account keys mean it can only ever be picked up again by the same
-  /// puuid — so signing out and back in restores it instead of starting from
-  /// an empty list. Everything else here is a copy of something Riot will hand
-  /// back on the next request.
+  /// Two things are deliberately kept, for the same reason: nothing can
+  /// reconstruct them. The **wishlist** is the only thing here the user
+  /// assembled by hand. The **shop sightings** are a record built up one day at
+  /// a time, and Riot has no history endpoint to replay — dropping them resets
+  /// every drought counter to "never seen", which is worse than useless
+  /// because it looks like an answer. Per-account keys mean both can only be
+  /// picked up again by the same puuid.
+  ///
+  /// Everything else here is a copy of something Riot hands back on the next
+  /// request.
   Future<void> clearAccountCaches(String accountId) async {
     for (final String key in <String>[
       CacheKeys.shopSnapshot(accountId),
@@ -169,6 +173,7 @@ class LocalStore {
       CacheKeys.ownedSkinLevels(accountId),
       CacheKeys.ownedAccessories(accountId),
       CacheKeys.playerProfile(accountId),
+      CacheKeys.nightMarketSeen(accountId),
     ]) {
       await _cache.delete(key);
     }

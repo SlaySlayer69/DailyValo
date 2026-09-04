@@ -10,6 +10,7 @@ import '../../../wishlist/data/repositories/wishlist_repository.dart';
 import '../datasources/demo_store_source.dart';
 import '../datasources/riot_store_api.dart';
 import '../models/shop.dart';
+import '../models/shop_sightings.dart';
 import '../models/storefront_snapshot.dart';
 
 /// Assembles the shop the UI renders.
@@ -66,13 +67,55 @@ class StoreRepository {
     snapshot ??= await _fetchSnapshot();
     await _store.writeCached(CacheKeys.shopSnapshot(accountId), snapshot.toJson());
 
-    return Shop.resolve(
+    final Shop shop = Shop.resolve(
       snapshot: snapshot,
       catalog: catalog,
       ownedSkinUuids: readCachedOwnedSkins(),
       ownedAccessoryUuids: readCachedOwnedAccessories(),
       wishlistedSkinUuids: _wishlist.skinUuids,
     );
+
+    await _recordSighting(shop);
+    return shop;
+  }
+
+  /// Writes down which skins were on offer today.
+  ///
+  /// Called for every resolved shop, cached or fresh, from the UI and from the
+  /// worker alike. Recording the same day twice is a no-op by construction, and
+  /// the alternative — recording only when a rotation is *detected* — would
+  /// miss every shop on a device that simply opens the app each morning, which
+  /// is most of them.
+  ///
+  /// Never fatal: a shop that fails to be written down is still a shop.
+  Future<void> _recordSighting(Shop shop) async {
+    if (shop.dailyOffers.isEmpty) return;
+    try {
+      final DateTime now = DateTime.now();
+      final ShopSightings updated = readSightings(now).record(
+        shop.dailyOffers.map((ShopOffer o) => o.skin.uuid),
+        now,
+      );
+      await _store.writeCached(
+        CacheKeys.shopSightings(accountId),
+        updated.toJson(),
+      );
+    } on Object catch (e) {
+      Log.e('Store', 'Could not record the shop sighting', e);
+    }
+  }
+
+  /// What this account has seen, and since when.
+  ///
+  /// A device with nothing recorded starts watching from [now] rather than from
+  /// the epoch, so "never seen" is immediately honest about how little it
+  /// knows.
+  ShopSightings readSightings(DateTime now) {
+    final Map<String, dynamic>? json = _store.readCachedMap(
+      CacheKeys.shopSightings(accountId),
+    );
+    if (json == null) return ShopSightings.startingAt(now);
+    return ShopSightings.fromJson(json) ?? ShopSightings.startingAt(now);
   }
 
   Future<StorefrontSnapshot> _fetchSnapshot() async {

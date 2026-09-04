@@ -79,6 +79,19 @@ abstract final class CacheKeys {
   static String ownedAccessories(String accountId) =>
       'collection.ownedAccessories.$accountId';
 
+  /// When each skin was last offered in this account's daily shop.
+  ///
+  /// Riot has no history endpoint — the storefront is only ever a snapshot of
+  /// now — so "how long have I been waiting for this?" is answerable only if
+  /// the app writes it down as each shop goes past.
+  static String shopSightings(String accountId) =>
+      'shop.sightings.$accountId';
+
+  /// Whether a Night Market was running the last time this account's shop was
+  /// read, so its *arrival* can be noticed rather than just its presence.
+  static String nightMarketSeen(String accountId) =>
+      'shop.nightMarketSeen.$accountId';
+
   /// What the background worker last did, and how many times it has run.
   ///
   /// Survives a sign-out on purpose — it is about Android's willingness to
@@ -103,6 +116,11 @@ abstract final class SettingKeys {
   static const String demoMode = 'demoMode';
   static const String shopNotificationsEnabled = 'notify.shop';
   static const String wishlistNotificationsEnabled = 'notify.wishlist';
+
+  /// Tells you when a Night Market opens. On its own switch because it fires a
+  /// few times a year rather than daily — the one people are most likely to
+  /// want, and the one most likely to be forgotten about.
+  static const String nightMarketNotificationsEnabled = 'notify.nightMarket';
 
   /// Hold notifications back to a chosen time of day instead of firing them
   /// as soon as the shop rotation is noticed.
