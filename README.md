@@ -270,12 +270,11 @@ that matches it. Prose is still a human job; this only guarantees the numbers.
 
 ## Known gaps
 
-* **Localisation.** The UI is English-only. The *content* language is already
-  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so what
-  is left is `flutter_localizations` plus ARB files — about 186 user-facing
-  strings across 24 files, several interpolated or pluralised. Mechanical rather
-  than hard, but German runs roughly 30% longer than English: the real work is
-  checking a dense shop grid for overflow on a device, not the translation.
+The interface is English and stays that way — a decision, not an unfinished
+job. Skin names, rarities and bundle titles still follow
+`SettingKeys.language`, since those come from `valorant-api.com` and are Riot's
+own translations.
+
 * **iOS.** The Dart is platform-agnostic, but only the Android host project is
   configured, and iOS background execution would need `BGTaskScheduler`
   identifiers in `Info.plist`.
