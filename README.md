@@ -3,16 +3,18 @@
 An unofficial Valorant shop and skin tracker for Android, built with Flutter.
 
 DailyValo shows your daily store, the Night Market when one is running, a
-wishlist you can be alerted on, and your skin collection — with full artwork,
-chromas and upgrade levels. It tells you when your shop rotates, at an hour you
-pick, and separately when something you are actually hunting for shows up.
+wishlist you can be alerted on, your skin collection and the full skin
+catalogue — with artwork, chromas and upgrade levels, and a record of how long
+each skin has been absent from your shop. It tells you when your shop rotates,
+at an hour you pick, and separately when something you are actually hunting for
+shows up.
 
 > DailyValo is not affiliated with, endorsed by, or sponsored by Riot Games. It
 > uses the same undocumented client endpoints the official desktop client uses,
 > and is read-only — it never buys, equips or changes anything.
 > See [Security and Riot's APIs](#security-and-riots-apis).
 
-**Current version: v3.4.0** · Android 7.0+ (`minSdk 24`) · 279 tests
+**Current version: v3.5.0** · Android 7.0+ (`minSdk 24`) · 327 tests
 
 ---
 
@@ -24,6 +26,7 @@ pick, and separately when something you are actually hunting for shows up.
 | **Night Market** | Discounted offers with the original price, the discount and your total savings. Says so plainly when no market is running. |
 | **Wishlist** | Searchable picker over the full catalogue in buy-menu order. Entries in today's shop are flagged. Exportable and importable as a file, and copyable to another account. |
 | **Collection** | Every skin you own, grouped and counted by rarity. The counts double as filters, and the tab shows what the selection is worth at shop prices. |
+| **Catalogue** | Every skin Riot has ever sold. Search by skin or weapon name; filter by rarity, weapon class, owned or not, and wishlisted; sort by weapon, name, rarity, price or **longest unseen**. |
 
 A persistent header carries your Riot ID, competitive rank and your Valorant
 Point, Radianite and Kingdom Credit balances. Tapping any skin opens a detail
@@ -32,6 +35,18 @@ with what it unlocks.
 
 **Preview clips.** Riot publishes short clips for most levels and for chromas
 with unique VFX; a still image cannot show you what a finisher does.
+
+**The drought counter.** Every skin says when it was last in your shop — *last
+seen 47 days ago*, *never seen*, or *in your shop today* — on its detail page,
+on the wishlist and on every catalogue tile.
+
+Riot publishes no shop history: the storefront is a snapshot of today, and no
+endpoint will tell you when a skin last came up. So the app writes it down as
+each rotation goes past, and records the day it started watching. That is why
+"never seen" reads *not seen in the 19 days tracked so far*: on a fresh install
+the shorter sentence would be a claim about the app dressed up as a claim about
+your shop. The record is per account and survives a sign-out, because nothing
+can rebuild it.
 
 **Three clocks, not one.** The daily skins roll over at 00:00 UTC, the Accessory
 Store rotates weekly, and each bundle leaves on its own date — so each section
@@ -48,8 +63,9 @@ background check; tapping it opens the shop.
 ### Accounts
 
 Several Riot accounts can be signed in at once. Everything is kept per account:
-shop, collection, wishlist, rank, wallet and notifications. *Add account*,
-*Switch account* and *Sign out of all accounts* live at the bottom of settings.
+shop, collection, wishlist, rank, wallet, notifications and the drought record.
+Tapping your Riot ID in the header switches between them; *Add account* and
+*Sign out of all accounts* live at the bottom of settings.
 
 Signing one account out leaves the others signed in and keeps that account's
 wishlist, so adding it back picks it up again.
@@ -59,23 +75,32 @@ and two accounts can hold the same one at different times.
 
 ### Notifications
 
-Two notifications on two Android channels, so either can be turned down from
-Android's own settings without touching the other.
+Three notifications on three Android channels, so any of them can be turned down
+from Android's own settings without touching the others.
 
-| | Daily shop | Wishlist hit |
-| --- | --- | --- |
-| Fires when | The four offers rotate | A wishlisted skin is among them |
-| Title | The account's name, e.g. `SlaySlayer` | The account's name |
-| Body | `Prime Vandal - Reaver Sheriff - Ion Phantom - Karambit` | `An item on your wishlist is in your shop!` |
+| | Daily shop | Wishlist hit | Night Market |
+| --- | --- | --- | --- |
+| Fires when | The four offers rotate | A wishlisted skin is among them | A Night Market opens |
+| Title | The account's name, e.g. `SlaySlayer` | The account's name | The account's name |
+| Body | `Prime Vandal - Reaver Sheriff - Ion Phantom - Karambit` | `An item on your wishlist is in your shop!` | `Night Market is open — 6 discounted skins, up to -47%` |
 
-Both alert with sound and a banner. Each signed-in account gets its own, so two
-accounts rotating at the same time produce two notifications rather than one
+All three alert with sound and a banner. Each signed-in account gets its own, so
+two accounts rotating at the same time produce two notifications rather than one
 replacing the other.
 
-**Delivery time.** By default both fire as soon as the rotation is noticed,
-which lands at 02:00 in much of Europe. Settings ▸ *Notification time* holds
-them back to an hour you pick. Detection still happens at reset, so what arrives
-at 09:30 is exactly what rotated at 02:00.
+The Night Market alert fires once per market rather than daily while one runs,
+names any wishlisted skins in it when expanded, and is checked on every
+background run rather than only when the daily shop rotates — a market lasts
+days, and hearing about it on day three is most of the way to not hearing about
+it at all.
+
+**Delivery time.** By default the shop and wishlist alerts fire as soon as the
+rotation is noticed, which lands at 02:00 in much of Europe. Settings ▸
+*Notification time* holds them back to an hour you pick. Detection still happens
+at reset, so what arrives at 09:30 is exactly what rotated at 02:00.
+
+It does not hold the Night Market alert back: those two describe a shop that
+cannot change until tomorrow, while a market is already counting down.
 
 The chosen time is a wall clock in your own timezone, resolved against the IANA
 database — so 09:30 is still 09:30 on the two days a year the clocks move. The
@@ -83,8 +108,8 @@ alarm is exact where Android permits it; the permission is requested when you
 switch the delivery time on, and refusing it costs punctuality rather than the
 notification.
 
-Neither notification expires on its own and neither is sticky: one stays until
-it is swiped, opened, or cleared by opening the app.
+None of them expires on its own and none is sticky: one stays until it is
+swiped, opened, or cleared by opening the app.
 
 **If one does not arrive**, Settings ▸ *Allow background checks* opens the system
 screen that lifts battery optimisation. It is the one setting that can stop the
@@ -112,7 +137,7 @@ Off by default, at the bottom of settings. It reveals:
 ```bash
 flutter pub get
 flutter run                 # debug build on a connected device/emulator
-flutter test                # 279 unit tests, no device needed
+flutter test                # 327 unit tests, no device needed
 flutter analyze             # zero warnings expected
 ```
 
@@ -163,10 +188,11 @@ lib/
     │   │                            bundles, demo source
     │   ├── wishlist/                Hive-backed wishlist + picker
     │   ├── collection/              Owned skins
+    │   ├── catalogue/               Every skin, searchable and sortable
     │   ├── skin_detail/             Artwork, chromas, upgrade levels
     │   └── home/                    Tab shell + settings sheet
     └── services/
-        ├── notifications/           Channels, schedule, the two shapes
+        ├── notifications/           Channels, schedule, the three shapes
         ├── logging/                 File sink and redaction
         ├── widgets/                 Home screen widget bridge
         └── background/             WorkManager dispatcher + sync service
@@ -243,12 +269,15 @@ account cancels all background work and clears the home screen widget.
 
 ## Testing
 
-279 unit tests, no device or network required. `flutter test` runs them all.
+327 unit tests, no device or network required. `flutter test` runs them all.
 
 The suite leans on the places where being wrong is invisible: the notification
 body formats (product spec, not implementation detail), the delivery time across
 both clock-change days, per-account storage isolation, the manifest entries
-scheduled alarms depend on, and that no credential can reach the exportable log.
+scheduled alarms depend on, that a Night Market is announced once per market
+rather than once per background run, that the drought counter never claims more
+history than the device has, and that no credential can reach the exportable
+log.
 
 `tool/check_readme.dart` keeps this file honest — see below.
 
@@ -270,12 +299,11 @@ that matches it. Prose is still a human job; this only guarantees the numbers.
 
 ## Known gaps
 
-* **Localisation.** The UI is English-only. The *content* language is already
-  wired through (`SettingKeys.language` → `valorant-api.com?language=`), so what
-  is left is `flutter_localizations` plus ARB files — about 186 user-facing
-  strings across 24 files, several interpolated or pluralised. Mechanical rather
-  than hard, but German runs roughly 30% longer than English: the real work is
-  checking a dense shop grid for overflow on a device, not the translation.
+The interface is English and stays that way — a decision, not an unfinished
+job. Skin names, rarities and bundle titles still follow
+`SettingKeys.language`, since those come from `valorant-api.com` and are Riot's
+own translations.
+
 * **iOS.** The Dart is platform-agnostic, but only the Android host project is
   configured, and iOS background execution would need `BGTaskScheduler`
   identifiers in `Info.plist`.

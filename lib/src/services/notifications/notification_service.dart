@@ -63,6 +63,12 @@ class NotificationService {
 
   static const String _wishlistChannelId = 'dv_wishlist_alert';
 
+  /// Its own channel, not the wishlist one. A Night Market opens a few times a
+  /// year and closes again on a timer, so it is the one notification here
+  /// somebody might want louder than the rest — or, equally, the one they may
+  /// not care about at all.
+  static const String _nightMarketChannelId = 'dv_night_market';
+
   /// Ids are `1000 + slot*10 + kind`.
   ///
   /// Stable per account, so a re-fired notification replaces that account's
@@ -73,12 +79,14 @@ class NotificationService {
   static const int _shopKind = 1;
   static const int _wishlistKind = 2;
   static const int _testKind = 3;
+  static const int _nightMarketKind = 4;
 
   static int idFor(int slot, int kind) => 1000 + slot * 10 + kind;
 
   int get shopNotificationId => idFor(_account.slot, _shopKind);
   int get wishlistNotificationId => idFor(_account.slot, _wishlistKind);
   int get testNotificationId => idFor(_account.slot, _testKind);
+  int get nightMarketNotificationId => idFor(_account.slot, _nightMarketKind);
 
   /// Every id this app could ever have used, for a device-wide clear.
   static Iterable<int> get allPossibleIds sync* {
@@ -86,6 +94,7 @@ class NotificationService {
       yield idFor(slot, _shopKind);
       yield idFor(slot, _wishlistKind);
       yield idFor(slot, _testKind);
+      yield idFor(slot, _nightMarketKind);
     }
   }
 
@@ -100,6 +109,16 @@ class NotificationService {
         _shopChannelId,
         'Daily shop',
         description: 'A summary of your four daily offers at reset.',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      );
+
+  static const AndroidNotificationChannel _nightMarketChannel =
+      AndroidNotificationChannel(
+        _nightMarketChannelId,
+        'Night Market',
+        description: 'Tells you when a Night Market opens.',
         importance: Importance.high,
         playSound: true,
         enableVibration: true,
@@ -140,6 +159,7 @@ class NotificationService {
     if (android != null) {
       await android.createNotificationChannel(_shopChannel);
       await android.createNotificationChannel(_wishlistChannel);
+      await android.createNotificationChannel(_nightMarketChannel);
       // Best-effort: on a device that never had the silent channel this is a
       // no-op, and a failure here is not worth losing notifications over.
       try {
@@ -280,6 +300,66 @@ class NotificationService {
     Log.d('Notify', 'Wishlist alert posted (${matchedLabels.length} matches)');
   }
 
+  /// A Night Market has opened.
+  ///
+  /// Sent once, when it appears — not while it is running. It is a few days
+  /// long and a few times a year, so the useful moment is the start; repeating
+  /// it daily would be the fastest way to get the channel muted.
+  Future<void> showNightMarket({
+    required int dealCount,
+    required int bestDiscount,
+    List<String> wishlistLabels = const <String>[],
+  }) async {
+    final String body = nightMarketBody(dealCount, bestDiscount);
+    await _plugin.show(
+      id: nightMarketNotificationId,
+      title: _title,
+      body: body,
+      notificationDetails: _nightMarketDetails(body, wishlistLabels),
+      payload: NotificationPayload.nightMarket,
+    );
+    Log.d('Notify', 'Night Market notification posted');
+  }
+
+  /// The one line the shade shows. Public so the wording is pinned by a
+  /// test rather than only by whoever last read it on a phone.
+  @visibleForTesting
+  static String nightMarketBody(int dealCount, int bestDiscount) {
+    final String noun = dealCount == 1 ? 'skin' : 'skins';
+    final String deals = '$dealCount discounted $noun';
+    // The best discount is what decides whether it is worth opening; the count
+    // is roughly the same number every time.
+    return bestDiscount > 0
+        ? 'Night Market is open — $deals, up to -$bestDiscount%'
+        : 'Night Market is open — $deals';
+  }
+
+  NotificationDetails _nightMarketDetails(
+    String body,
+    List<String> wishlistLabels,
+  ) {
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _nightMarketChannelId,
+        _nightMarketChannel.name,
+        channelDescription: _nightMarketChannel.description,
+        importance: Importance.high,
+        priority: Priority.high,
+        category: AndroidNotificationCategory.promo,
+        autoCancel: true,
+        ongoing: false,
+        // Expanding names the wishlisted skins in it, which is the only part
+        // that turns "there is a sale" into "open the app now".
+        styleInformation: wishlistLabels.isEmpty
+            ? null
+            : BigTextStyleInformation(
+                '$body\n\nOn your wishlist:\n${wishlistLabels.join('\n')}',
+                contentTitle: _title,
+              ),
+      ),
+    );
+  }
+
   // --- Deferred delivery -----------------------------------------------------
 
   /// Posts the daily digest at [at] instead of now.
@@ -404,7 +484,8 @@ class NotificationService {
         final int? id = n.id;
         if (id == shopNotificationId ||
             id == wishlistNotificationId ||
-            id == testNotificationId) {
+            id == testNotificationId ||
+            id == nightMarketNotificationId) {
           await _plugin.cancel(id: id!);
         }
       }
@@ -509,6 +590,7 @@ class NotificationService {
       shopNotificationId,
       wishlistNotificationId,
       testNotificationId,
+      nightMarketNotificationId,
     ]) {
       await _plugin.cancel(id: id);
     }
@@ -527,4 +609,5 @@ class NotificationService {
 abstract final class NotificationPayload {
   static const String dailyShop = 'daily_shop';
   static const String wishlistHit = 'wishlist_hit';
+  static const String nightMarket = 'night_market';
 }

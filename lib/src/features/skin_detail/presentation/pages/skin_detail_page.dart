@@ -9,6 +9,8 @@ import '../../../content/data/models/content_tier.dart';
 import '../../../content/data/models/weapon_skin.dart';
 import '../../../content/presentation/widgets/tier_badge.dart';
 import '../../../player/presentation/widgets/currency_chip.dart';
+import '../../../store/data/models/shop_sightings.dart';
+import '../../../store/presentation/widgets/drought_indicator.dart';
 import '../widgets/chroma_selector.dart';
 import '../widgets/level_list.dart';
 import '../widgets/skin_video_sheet.dart';
@@ -30,6 +32,11 @@ class SkinDetailPage extends ConsumerStatefulWidget {
   /// Shown when the skin is currently on offer.
   final int? price;
 
+  /// What the caller already knows about ownership.
+  ///
+  /// The page checks the collection itself as well, so this only ever adds: a
+  /// caller that knows (the Collection tab, a shop card marked owned) is
+  /// believed even before the entitlements have synced.
   final bool isOwned;
 
   /// Opens the detail page. Kept next to the page so callers do not have to
@@ -85,6 +92,12 @@ class _SkinDetailPageState extends ConsumerState<SkinDetailPage> {
     final TextTheme text = Theme.of(context).textTheme;
     final Color accent = widget.tier?.color ?? AppColors.borderStrong;
     final bool isWishlisted = ref.watch(isWishlistedProvider(_skin.uuid));
+    final bool isOwned =
+        widget.isOwned ||
+        ref.watch(ownedSkinUuidsProvider).contains(_skin.uuid);
+    final SkinAvailability availability = ref.watch(
+      skinAvailabilityProvider(_skin.uuid),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -152,7 +165,7 @@ class _SkinDetailPageState extends ConsumerState<SkinDetailPage> {
                       style: text.labelSmall,
                     ),
                     const Spacer(),
-                    if (widget.isOwned) const _OwnedPill(),
+                    if (isOwned) const _OwnedPill(),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -175,6 +188,9 @@ class _SkinDetailPageState extends ConsumerState<SkinDetailPage> {
                     ],
                   ),
                 ],
+
+                const SizedBox(height: AppSpacing.lg),
+                DroughtPanel(availability: availability, isOwned: isOwned),
 
                 if (_skin.hasChromas) ...<Widget>[
                   const SizedBox(height: AppSpacing.xl),

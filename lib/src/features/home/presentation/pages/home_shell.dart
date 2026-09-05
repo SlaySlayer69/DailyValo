@@ -5,14 +5,21 @@ import '../../../../app/providers.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../services/background/background_scheduler.dart';
 import '../../../../services/background/shop_sync_service.dart';
+import '../../../catalogue/presentation/pages/catalogue_page.dart';
 import '../../../collection/presentation/pages/collection_page.dart';
 import '../../../player/presentation/widgets/player_header.dart';
 import '../../../store/presentation/pages/daily_shop_page.dart';
 import '../../../store/presentation/pages/night_market_page.dart';
 import '../../../wishlist/presentation/pages/wishlist_page.dart';
 import '../widgets/account_sheet.dart';
+import '../widgets/account_switcher.dart';
 
-/// The signed-in shell: persistent header, four tabs, bottom navigation.
+/// The signed-in shell: persistent header, five tabs, bottom navigation.
+///
+/// Tab order is fixed and appended to rather than rearranged — a notification
+/// payload resolves to an index in `main()`, and a launcher shortcut or a
+/// pending intent from an older build must not land on a different tab after an
+/// update.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, this.initialTab = 0});
 
@@ -87,6 +94,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
           children: <Widget>[
             PlayerHeader(
               onTapProfile: () => AccountSheet.open(context),
+              // Only when there is a second account to switch to — see
+              // `PlayerHeader.onTapName`.
+              onTapName: ref.watch(accountRegistryProvider).all().length > 1
+                  ? () => switchAccount(context, ref)
+                  : null,
             ),
             Expanded(
               // IndexedStack, not a PageView: switching tabs must not discard
@@ -98,6 +110,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                   NightMarketPage(),
                   WishlistPage(),
                   CollectionPage(),
+                  CataloguePage(),
                 ],
               ),
             ),
@@ -132,6 +145,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2_rounded),
               label: 'Collection',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Catalogue',
             ),
           ],
         ),

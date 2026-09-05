@@ -18,9 +18,15 @@ import 'currency_chip.dart';
 /// scroll away — it is the app's status line, and the wallet balance is the
 /// number people open this app to check.
 class PlayerHeader extends ConsumerWidget {
-  const PlayerHeader({super.key, this.onTapProfile});
+  const PlayerHeader({super.key, this.onTapProfile, this.onTapName});
 
+  /// The overflow button — settings, notifications, sign-out.
   final VoidCallback? onTapProfile;
+
+  /// Tapping the Riot ID itself. Null on a device with one account, where
+  /// there is nothing to switch to and a tap target that does nothing is worse
+  /// than no tap target.
+  final VoidCallback? onTapName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,6 +63,7 @@ class PlayerHeader extends ConsumerWidget {
           tier: catalog.valueOrNull?.competitiveTier(data.competitiveTier),
           isDemo: isDemo,
           onTapProfile: onTapProfile,
+          onTapName: onTapName,
         ),
       ),
     );
@@ -69,12 +76,14 @@ class _HeaderContent extends StatelessWidget {
     required this.tier,
     required this.isDemo,
     this.onTapProfile,
+    this.onTapName,
   });
 
   final PlayerProfile profile;
   final CompetitiveTier? tier;
   final bool isDemo;
   final VoidCallback? onTapProfile;
+  final VoidCallback? onTapName;
 
   @override
   Widget build(BuildContext context) {
@@ -95,22 +104,7 @@ class _HeaderContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          profile.riotId,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.titleLarge,
-                        ),
-                      ),
-                      if (isDemo) ...<Widget>[
-                        const SizedBox(width: AppSpacing.sm),
-                        const _DemoBadge(),
-                      ],
-                    ],
-                  ),
+                  _identity(context, text),
                   const SizedBox(height: 2),
                   Text(
                     _rankLabel(tier, profile.rankedRating, profile.rankKnown),
@@ -139,6 +133,61 @@ class _HeaderContent extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         _WalletStrip(wallet: profile.wallet, known: profile.walletKnown),
       ],
+    );
+  }
+
+  /// The Riot ID, which doubles as the account switcher.
+  ///
+  /// The name is where people look to see *whose* shop this is, so it is also
+  /// where they reach for to change it — the switch was previously two taps
+  /// deep in settings, past everything about notifications.
+  ///
+  /// The chevron is the only thing that marks it as interactive, and it appears
+  /// only when there is somewhere to go: on a one-account device the name is
+  /// plain text, because a control that opens a list of one is worse than no
+  /// control.
+  Widget _identity(BuildContext context, TextTheme text) {
+    final Row row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Flexible(
+          child: Text(
+            profile.riotId,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: text.titleLarge,
+          ),
+        ),
+        if (isDemo) ...<Widget>[
+          const SizedBox(width: AppSpacing.sm),
+          const _DemoBadge(),
+        ],
+        if (onTapName != null) ...<Widget>[
+          const SizedBox(width: 5),
+          const Icon(
+            Icons.unfold_more_rounded,
+            size: 15,
+            color: AppColors.textTertiary,
+          ),
+        ],
+      ],
+    );
+
+    if (onTapName == null) return row;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTapName,
+          borderRadius: const BorderRadius.all(Radius.circular(AppRadius.sm)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: row,
+          ),
+        ),
+      ),
     );
   }
 
