@@ -237,7 +237,7 @@ jobs:
           if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
             {
               echo
-              echo '> ### ⚠️ Test build'
+              echo '> ### Test build'
               echo '>'
               echo '> No signing key was configured, so this APK is signed with'
               echo '> a throwaway key the build runner generated. Android'

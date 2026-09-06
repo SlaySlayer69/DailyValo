@@ -34,7 +34,7 @@ class LoggingInterceptor extends Interceptor {
     options.extra[_startedAt] = DateTime.now();
     Log.t(
       'Net/$label',
-      '→ ${options.method} ${options.uri}'
+      '--> ${options.method} ${options.uri}'
       '${_body('body', options.data)}',
     );
     handler.next(options);
@@ -47,7 +47,7 @@ class LoggingInterceptor extends Interceptor {
   ) {
     Log.t(
       'Net/$label',
-      '← ${response.statusCode} ${response.requestOptions.uri}'
+      '<-- ${response.statusCode} ${response.requestOptions.uri}'
       ' ${_elapsed(response.requestOptions)}'
       '${_body('body', response.data)}',
     );
@@ -58,7 +58,7 @@ class LoggingInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     Log.w(
       'Net/$label',
-      '✗ ${err.type.name} ${err.requestOptions.uri}'
+      'ERR ${err.type.name} ${err.requestOptions.uri}'
       ' ${_elapsed(err.requestOptions)}'
       '${err.response == null ? '' : ' status ${err.response?.statusCode}'}'
       '${_body('body', err.response?.data)}',
