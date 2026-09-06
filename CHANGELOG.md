@@ -4,6 +4,10 @@ Every released version of DailyValo. The release workflow reads the section for
 a tag out of this file and uses it as the GitHub Release body, so the heading
 format matters: one `## vX.Y.Z` per version, newest first.
 
+## v3.5.1
+
+Quality fixes.
+
 ## v3.5.0
 
 **How long you have been waiting.** Every skin now carries a drought counter —

@@ -14,7 +14,7 @@ shows up.
 > and is read-only — it never buys, equips or changes anything.
 > See [Security and Riot's APIs](#security-and-riots-apis).
 
-**Current version: v3.5.0** · Android 7.0+ (`minSdk 24`) · 327 tests
+**Current version: v3.5.1** · Android 7.0+ (`minSdk 24`) · 327 tests
 
 ---
 
