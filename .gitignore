@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle's own output. Only `/build/` was listed, which does not cover
+# this one — a 130 KB problems report got committed because of it.
+/android/build/
+/android/.gradle/

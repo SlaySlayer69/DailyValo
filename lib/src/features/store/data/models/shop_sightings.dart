@@ -20,7 +20,7 @@ class ShopSightings {
   /// When this device started watching this account's shop.
   final DateTime trackedSince;
 
-  /// Skin UUID → the day it was last offered. Dates only; the shop rotates
+  /// Skin UUID -> the day it was last offered. Dates only; the shop rotates
   /// once a day, so the time of day says nothing.
   final Map<String, DateTime> lastSeen;
 
