@@ -15,7 +15,7 @@ class WebViewCookieReader {
     'com.dailyvalo.app/webview_cookies',
   );
 
-  /// Parses the raw `Cookie:` header for [url] into name → value.
+  /// Parses the raw `Cookie:` header for [url] into name -> value.
   ///
   /// Splits each pair on the **first** `=` only: cookie values are opaque and
   /// routinely contain `=` (base64 padding, JWT-ish blobs), and splitting on

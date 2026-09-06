@@ -126,7 +126,7 @@ jobs:
                       ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if gh secret list --repo '${{ github.repository }}' \
                | grep -q "^$name"; then
-              echo "✓ $name"
+              echo "stored: $name"
             else
               echo "::error::$name was not stored."
               missing=1

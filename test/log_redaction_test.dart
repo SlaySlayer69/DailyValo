@@ -84,7 +84,7 @@ void main() {
 
     test('keeps the parts of a request that make it worth logging', () {
       const String line =
-          '→ GET https://pd.eu.a.pvp.net/store/v3/storefront/abc-123 (204ms)';
+          '--> GET https://pd.eu.a.pvp.net/store/v3/storefront/abc-123 (204ms)';
       expect(LogRedaction.apply(line), line);
     });
 

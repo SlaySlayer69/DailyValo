@@ -24,7 +24,7 @@ class CatalogueFilterSheet extends StatefulWidget {
 
   final CatalogueQuery query;
 
-  /// Rarity key → its colour, in rarest-first order, including the untiered
+  /// Rarity key -> its colour, in rarest-first order, including the untiered
   /// bucket when the catalogue has one.
   final Map<String, Color> tiers;
 

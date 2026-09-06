@@ -110,7 +110,7 @@ abstract final class RiotConstants {
       '3ad1b2b2-acdb-4524-852f-954a76ddae0a';
 
   // ---------------------------------------------------------------------------
-  // Region → shard routing
+  // Region -> shard routing
   // ---------------------------------------------------------------------------
   static const Map<String, String> regionToShard = <String, String>{
     'na': 'na',

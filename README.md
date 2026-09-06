@@ -14,7 +14,7 @@ shows up.
 > and is read-only — it never buys, equips or changes anything.
 > See [Security and Riot's APIs](#security-and-riots-apis).
 
-**Current version: v3.5.0** · Android 7.0+ (`minSdk 24`) · 327 tests
+**Current version: v3.5.1** · Android 7.0+ (`minSdk 24`) · 327 tests
 
 ---
 
@@ -167,7 +167,7 @@ shared `core`.
 
 ```
 lib/
-├── main.dart                        Bootstrap: graph → workmanager → runApp
+├── main.dart                        Bootstrap: graph -> workmanager -> runApp
 └── src/
     ├── app/
     │   ├── dependencies.dart        The object graph
@@ -183,7 +183,7 @@ lib/
     ├── features/
     │   ├── auth/                    RSO login, account registry, silent re-auth
     │   ├── content/                 valorant-api.com catalogue + cache
-    │   ├── player/                  Riot ID, rank, wallet → header
+    │   ├── player/                  Riot ID, rank, wallet -> header
     │   ├── store/                   Storefront, night market, accessories,
     │   │                            bundles, demo source
     │   ├── wishlist/                Hive-backed wishlist + picker
@@ -208,12 +208,12 @@ graph rather than mutating anything.
 **Data flow.**
 
 ```
-valorant-api.com ──► ContentRepository ──┐
+valorant-api.com ──> ContentRepository ──┐
                      (Hive, 24h stale)   │
-                                         ├──► Shop.resolve ──► UI
-Riot PD /storefront ─► StoreRepository ──┤
+                                         ├──> Shop.resolve ──> UI
+Riot PD /storefront ─> StoreRepository ──┤
                        (Hive snapshot)   │
-Hive wishlist ─────► WishlistRepository ─┘
+Hive wishlist ─────> WishlistRepository ─┘
 ```
 
 The storefront returns nothing but UUIDs and prices; everything human-readable
