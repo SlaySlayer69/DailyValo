@@ -148,6 +148,17 @@ List<_Rule> _rules(_Facts facts) => <_Rule>[
     expected: '${facts.tests}',
   ),
   _Rule(
+    // Static rather than shields.io's `github/license/...`, which asks GitHub
+    // for the answer unauthenticated and reads "not specified" the moment it
+    // is rate limited — which it was, for a repository whose licence GitHub
+    // had already detected. A badge on the first line that is wrong when a
+    // third party is busy is worse than one that is wrong only when somebody
+    // edits it, and this rule covers the second case.
+    name: 'Licence badge',
+    pattern: RegExp(r'img\.shields\.io/badge/license-(.+?)-[0-9A-Fa-f]{6}'),
+    expected: _licenceShortName(),
+  ),
+  _Rule(
     name: 'Test count (getting started)',
     pattern: RegExp(r'flutter test\s+# ([0-9]+) unit tests'),
     expected: '${facts.tests}',
@@ -163,6 +174,40 @@ List<_Rule> _rules(_Facts facts) => <_Rule>[
     expected: _latestChangelogVersion(),
   ),
 ];
+
+/// What the licence badge should say, read from LICENSE itself.
+///
+/// A lookup rather than a parser: the point is to catch a badge that disagrees
+/// with the file beside it, and a project carries one licence. Anything not in
+/// the table returns the raw heading, which fails the comparison and says why —
+/// the honest outcome for a licence nobody thought to teach this about.
+///
+/// The values are spelled the way a shields.io path needs them, where a literal
+/// hyphen is written twice.
+String _licenceShortName() {
+  final File file = File('LICENSE');
+  if (!file.existsSync()) return '';
+
+  final String heading = file
+      .readAsLinesSync()
+      .firstWhere((String l) => l.trim().isNotEmpty, orElse: () => '')
+      .trim();
+
+  const Map<String, String> known = <String, String>{
+    'mit license': 'MIT',
+    'apache license': 'Apache--2.0',
+    'gnu affero general public license': 'AGPL--3.0',
+    'gnu general public license': 'GPL--3.0',
+    'bsd 3-clause license': 'BSD--3--Clause',
+    'mozilla public license': 'MPL--2.0',
+  };
+
+  final String lower = heading.toLowerCase();
+  for (final MapEntry<String, String> entry in known.entries) {
+    if (lower.startsWith(entry.key)) return entry.value;
+  }
+  return heading;
+}
 
 /// The newest version the changelog documents.
 ///
