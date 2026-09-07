@@ -139,6 +139,15 @@ List<_Rule> _rules(_Facts facts) => <_Rule>[
     expected: '${facts.tests}',
   ),
   _Rule(
+    // The badge at the top of the file. Dynamic badges read GitHub and cannot
+    // drift; this one is a number typed into a URL, so it is the single most
+    // likely thing here to end up quietly wrong — and it sits in the first
+    // screenful, where being wrong costs the most.
+    name: 'Test count (badge)',
+    pattern: RegExp(r'img\.shields\.io/badge/tests-([0-9]+)-'),
+    expected: '${facts.tests}',
+  ),
+  _Rule(
     name: 'Test count (getting started)',
     pattern: RegExp(r'flutter test\s+# ([0-9]+) unit tests'),
     expected: '${facts.tests}',

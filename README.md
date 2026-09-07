@@ -1,6 +1,21 @@
+<div align="center">
+
 # DailyValo
 
-An unofficial Valorant shop and skin tracker for Android, built with Flutter.
+**An unofficial Valorant shop and skin tracker for Android, built with Flutter.**
+
+[![CI](https://img.shields.io/github/actions/workflow/status/SlaySlayer69/DailyValo/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=15181D&color=35D07F)](https://github.com/SlaySlayer69/DailyValo/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/SlaySlayer69/DailyValo?style=for-the-badge&label=release&labelColor=15181D&color=FF4655)](https://github.com/SlaySlayer69/DailyValo/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/SlaySlayer69/DailyValo/total?style=for-the-badge&label=downloads&labelColor=15181D&color=7C5CFF)](https://github.com/SlaySlayer69/DailyValo/releases)
+[![Stars](https://img.shields.io/github/stars/SlaySlayer69/DailyValo?style=for-the-badge&label=stars&labelColor=15181D&color=FFB020)](https://github.com/SlaySlayer69/DailyValo/stargazers)
+
+[![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white&labelColor=15181D)](#installing)
+[![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=for-the-badge&logo=flutter&logoColor=white&labelColor=15181D)](https://flutter.dev)
+[![Tests](https://img.shields.io/badge/tests-327-35D07F?style=for-the-badge&labelColor=15181D)](#testing)
+
+[![Download the APK](https://img.shields.io/badge/DOWNLOAD-ARM64%20%C2%B7%20ARM32%20%C2%B7%20UNIVERSAL-FF4655?style=for-the-badge&logo=android&logoColor=white&labelColor=15181D)](https://github.com/SlaySlayer69/DailyValo/releases/latest)
+
+</div>
 
 DailyValo shows your daily store, the Night Market when one is running, a
 wishlist you can be alerted on, your skin collection and the full skin
