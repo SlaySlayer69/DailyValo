@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/SlaySlayer69/DailyValo/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=15181D&color=35D07F)](https://github.com/SlaySlayer69/DailyValo/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/SlaySlayer69/DailyValo?style=for-the-badge&label=release&labelColor=15181D&color=FF4655)](https://github.com/SlaySlayer69/DailyValo/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/SlaySlayer69/DailyValo/total?style=for-the-badge&label=downloads&labelColor=15181D&color=7C5CFF)](https://github.com/SlaySlayer69/DailyValo/releases)
-[![License](https://img.shields.io/github/license/SlaySlayer69/DailyValo?style=for-the-badge&label=license&labelColor=15181D&color=FFB020)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-FFB020?style=for-the-badge&labelColor=15181D)](LICENSE)
 
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white&labelColor=15181D)](#installing)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=for-the-badge&logo=flutter&logoColor=white&labelColor=15181D)](https://flutter.dev)
