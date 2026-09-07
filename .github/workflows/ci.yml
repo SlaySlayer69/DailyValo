@@ -1,0 +1,51 @@
+name: CI
+
+# The checks a contributor runs locally, run on every push to main and every
+# pull request.
+#
+# The release workflow already runs `flutter analyze` and `flutter test`, but it
+# runs them *after the tag is cut* — the wrong end of the process, because by
+# the time one fails the tag exists and the version is public. Nothing was
+# checking a pull request at all, so a change could reach main unverified and
+# only be caught on the way out the door.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # The same version the release workflow pins. A change that passes
+          # here and fails there would be worse than no check at all.
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+      # The README states the version and the test count. Checking it here is
+      # what keeps those true between releases rather than only at one.
+      - run: dart tool/check_readme.dart
