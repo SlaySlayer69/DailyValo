@@ -18,6 +18,51 @@ shows up.
 
 ---
 
+## Installing
+
+Take the APK for your phone from the
+[latest release](https://github.com/SlaySlayer69/DailyValo/releases/latest) —
+`arm64-v8a` unless you know your device is 32-bit — and open it.
+
+### Android will warn you, and that is expected
+
+Play Protect shows **App scan recommended — Play Protect hasn't seen this app
+before** for anything installed outside the Play Store that Google has not
+scanned yet. It is a statement about Google's records, not about this app. The
+check is keyed to the APK's fingerprint, so a release published an hour ago is
+unknown by definition, and the warning returns with every new version.
+
+Tap **Scan app**. Google checks the file and the install carries on.
+
+**Do not switch Play Protect off**, here or anywhere else. It is the one thing
+standing between an Android phone and everything else that can be sideloaded,
+and no app is worth turning it off for — this one included.
+
+The only way to be rid of the prompt entirely is distribution through the Play
+Store, which DailyValo does not use. See [Known gaps](#known-gaps).
+
+### Checking what you downloaded
+
+Every release is signed with the same key, which is what lets each version
+install over the last one and keeps your wishlist and drought history through
+an update. The certificate is:
+
+```
+SHA-256 1d9ec5f015f98d27c29ef4638b6da06a54067775ba15fe2e3ed59ce0490441f3
+```
+
+`apksigner verify --print-certs DailyValo-*.apk` prints it back. A file that
+shows anything else did not come from this repository.
+
+### Updates
+
+GitHub does not announce new releases unless you watch the repository.
+[Obtainium](https://github.com/ImranR98/Obtainium) follows the releases page and
+offers updates the way a store would, which is the closest thing to an update
+channel this app has.
+
+---
+
 ## Features
 
 | Tab | What it does |
@@ -307,3 +352,12 @@ own translations.
 * **iOS.** The Dart is platform-agnostic, but only the Android host project is
   configured, and iOS background execution would need `BGTaskScheduler`
   identifiers in `Info.plist`.
+
+* **The Play Store.** Distribution is GitHub Releases and nothing else, which is
+  why every install opens with the Play Protect prompt — see
+  [Installing](#installing). Getting on the Store is not a packaging problem.
+  Sign-in is a WebView against Riot's own login page that keeps the resulting
+  cookie, which during review is difficult to tell apart from a credential
+  harvester however carefully it is built, and the app reads undocumented
+  endpoints and renders Riot's artwork. Both are the subject of
+  [Security and Riot's APIs](#security-and-riots-apis).

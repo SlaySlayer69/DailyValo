@@ -223,6 +223,29 @@ jobs:
             echo '| `universal` | Works everywhere, roughly 3× the size |'
           } >> /tmp/notes.md
 
+          # Unconditional, on every release. Play Protect keys its warning to
+          # the APK fingerprint, so a release published an hour ago is unknown
+          # to it by definition and the prompt comes back every single time.
+          # Whoever is installing is looking at that dialog right now, and a
+          # scary screen with no explanation next to it is how a project loses
+          # the benefit of the doubt.
+          #
+          # Note for editors: this block is inside single quotes, so it must
+          # not contain an apostrophe.
+          {
+            echo
+            echo '> ### Android will warn you, and that is expected'
+            echo '>'
+            echo '> Play Protect says *App scan recommended* for anything it'
+            echo '> has not scanned before, and it checks the file'
+            echo '> fingerprint — so a release published an hour ago is'
+            echo '> unknown by definition. Tap **Scan app** and the install'
+            echo '> carries on.'
+            echo '>'
+            echo '> It is a statement about what Google has on file, not'
+            echo '> about this app. Please do not switch Play Protect off.'
+          } >> /tmp/notes.md
+
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             {
               echo
