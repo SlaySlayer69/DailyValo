@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/SlaySlayer69/DailyValo/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=15181D&color=35D07F)](https://github.com/SlaySlayer69/DailyValo/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/SlaySlayer69/DailyValo?style=for-the-badge&label=release&labelColor=15181D&color=FF4655)](https://github.com/SlaySlayer69/DailyValo/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/SlaySlayer69/DailyValo/total?style=for-the-badge&label=downloads&labelColor=15181D&color=7C5CFF)](https://github.com/SlaySlayer69/DailyValo/releases)
-[![Stars](https://img.shields.io/github/stars/SlaySlayer69/DailyValo?style=for-the-badge&label=stars&labelColor=15181D&color=FFB020)](https://github.com/SlaySlayer69/DailyValo/stargazers)
+[![License](https://img.shields.io/github/license/SlaySlayer69/DailyValo?style=for-the-badge&label=license&labelColor=15181D&color=FFB020)](LICENSE)
 
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white&labelColor=15181D)](#installing)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=for-the-badge&logo=flutter&logoColor=white&labelColor=15181D)](https://flutter.dev)
@@ -376,3 +376,21 @@ own translations.
   harvester however carefully it is built, and the app reads undocumented
   endpoints and renders Riot's artwork. Both are the subject of
   [Security and Riot's APIs](#security-and-riots-apis).
+
+---
+
+## Licence
+
+[MIT](LICENSE). Copy it, use it, change it, ship it — commercially if you like.
+The one condition is that the copyright notice and the licence text travel with
+whatever you make from it, which is the difference between building on someone
+else's work and passing it off as your own.
+
+Two things the licence does not cover, because they were never mine to give:
+
+* **Riot's content.** Skin names, artwork, rarities and bundle art come from
+  `valorant-api.com` and belong to Riot Games. This licence says nothing about
+  them, and neither the app nor a fork of it acquires any right to use them.
+* **The name.** *DailyValo* is what this build is called. MIT grants copyright
+  permissions, not naming rights — a fork is welcome, a fork claiming to be
+  this one is not.
